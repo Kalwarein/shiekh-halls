@@ -8,89 +8,95 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Sheikh Tais Academy Theme - Gold & Brown Academic Colors */
+    --background: 43 100% 98%;
+    --foreground: 25 35% 15%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 43 100% 99%;
+    --card-foreground: 25 35% 15%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 43 100% 99%;
+    --popover-foreground: 25 35% 15%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary: Gold (#FFD700) */
+    --primary: 51 100% 50%;
+    --primary-foreground: 25 35% 15%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary: Warm Brown (#5A3E2B) */
+    --secondary: 25 35% 26%;
+    --secondary-foreground: 43 100% 98%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 43 30% 95%;
+    --muted-foreground: 25 15% 45%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent: Light Gold */
+    --accent: 48 100% 88%;
+    --accent-foreground: 25 35% 15%;
 
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 43 100% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 43 30% 90%;
+    --input: 43 30% 90%;
+    --ring: 51 100% 50%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
-    --sidebar-background: 0 0% 98%;
+    /* Sidebar with warm academic colors */
+    --sidebar-background: 25 35% 26%;
+    --sidebar-foreground: 43 100% 95%;
+    --sidebar-primary: 51 100% 50%;
+    --sidebar-primary-foreground: 25 35% 15%;
+    --sidebar-accent: 25 25% 32%;
+    --sidebar-accent-foreground: 43 100% 95%;
+    --sidebar-border: 25 25% 35%;
+    --sidebar-ring: 51 100% 50%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Custom gradients and effects */
+    --gradient-gold: linear-gradient(135deg, hsl(51 100% 60%), hsl(48 100% 55%));
+    --gradient-warm: linear-gradient(180deg, hsl(43 100% 98%), hsl(43 50% 95%));
+    --shadow-gold: 0 10px 30px -10px hsl(51 100% 50% / 0.3);
+    --shadow-warm: 0 4px 20px -4px hsl(25 35% 26% / 0.1);
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    /* Dark theme for Sheikh Tais Academy */
+    --background: 25 35% 8%;
+    --foreground: 43 100% 95%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 25 35% 10%;
+    --card-foreground: 43 100% 95%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 25 35% 10%;
+    --popover-foreground: 43 100% 95%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 51 100% 50%;
+    --primary-foreground: 25 35% 15%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 25 25% 15%;
+    --secondary-foreground: 43 100% 95%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 25 25% 15%;
+    --muted-foreground: 43 20% 65%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 25 25% 18%;
+    --accent-foreground: 43 100% 95%;
 
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 43 100% 95%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --border: 25 25% 18%;
+    --input: 25 25% 18%;
+    --ring: 51 100% 50%;
+    
+    --sidebar-background: 25 35% 12%;
+    --sidebar-foreground: 43 100% 90%;
+    --sidebar-primary: 51 100% 50%;
+    --sidebar-primary-foreground: 25 35% 15%;
+    --sidebar-accent: 25 25% 18%;
+    --sidebar-accent-foreground: 43 100% 90%;
+    --sidebar-border: 25 25% 20%;
+    --sidebar-ring: 51 100% 50%;
   }
 }
 
@@ -100,6 +106,42 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-inter;
+  }
+}
+
+@layer components {
+  /* Loading animations */
+  .shimmer {
+    @apply relative overflow-hidden;
+  }
+  
+  .shimmer::before {
+    @apply absolute inset-0;
+    content: '';
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--primary) / 0.1),
+      transparent
+    );
+    transform: translateX(-100%);
+    animation: shimmer 2s infinite;
+  }
+  
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  /* Premium button styles */
+  .btn-gold {
+    @apply bg-gradient-to-r from-primary to-yellow-400 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-300;
+  }
+
+  /* Card styles with premium effects */
+  .card-premium {
+    @apply bg-card border border-border rounded-xl shadow-sm hover:shadow-md transition-all duration-300;
   }
 }

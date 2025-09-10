@@ -9,6 +9,8 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Students from "./pages/Students";
+import StudentProfile from "./pages/StudentProfile";
+import DataEntrySystem from "./pages/DataEntrySystem";
 import ReportCards from "./pages/ReportCards";
 import Finance from "./pages/Finance";
 import Attendance from "./pages/Attendance";
@@ -34,6 +36,8 @@ const App = () => (
               <Route index element={<Dashboard />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="students" element={<Students />} />
+              <Route path="student/:id" element={<StudentProfile />} />
+              <Route path="data-entry" element={<DataEntrySystem />} />
               <Route path="report-cards" element={<ReportCards />} />
               <Route path="finance" element={<Finance />} />
               <Route path="attendance" element={<Attendance />} />

@@ -85,9 +85,9 @@ export default function ReportCards() {
   const filteredReports = reportCards.filter(report => {
     const matchesSearch = report.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          report.admissionNumber.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesClass = !selectedClass || report.class === selectedClass;
-    const matchesTerm = !selectedTerm || report.term === selectedTerm;
-    const matchesYear = !selectedYear || report.year === selectedYear;
+    const matchesClass = !selectedClass || selectedClass === 'all' || report.class === selectedClass;
+    const matchesTerm = !selectedTerm || selectedTerm === 'all' || report.term === selectedTerm;
+    const matchesYear = !selectedYear || selectedYear === 'all' || report.year === selectedYear;
     return matchesSearch && matchesClass && matchesTerm && matchesYear;
   });
 
@@ -233,7 +233,7 @@ export default function ReportCards() {
             <SelectValue placeholder="Filter by class" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Classes</SelectItem>
+            <SelectItem value="all">All Classes</SelectItem>
             {classes.map((cls) => (
               <SelectItem key={cls} value={cls}>
                 {cls}
@@ -246,7 +246,7 @@ export default function ReportCards() {
             <SelectValue placeholder="Filter by term" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Terms</SelectItem>
+            <SelectItem value="all">All Terms</SelectItem>
             {terms.map((term) => (
               <SelectItem key={term} value={term}>
                 {term}

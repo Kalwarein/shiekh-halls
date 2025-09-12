@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Search, Filter, Edit, Trash2, Eye } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,145 +13,124 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { supabase } from '@/integrations/supabase/client';
+import { useNavigate } from 'react-router-dom';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/hooks/use-toast';
 
-// Mock data
-const students = [
-  {
-    id: '1',
-    admissionNumber: 'STA001',
-    fullName: 'Ahmed Ibrahim',
-    class: 'JSS 1A',
-    parentName: 'Ibrahim Mohammed',
-    parentContact: '+234 803 123 4567',
-    dateOfBirth: '2009-05-15',
-  },
-  {
-    id: '2',
-    admissionNumber: 'STA002',
-    fullName: 'Fatima Abubakar',
-    class: 'JSS 1B',
-    parentName: 'Abubakar Hassan',
-    parentContact: '+234 805 987 6543',
-    dateOfBirth: '2009-08-22',
-  },
-  {
-    id: '3',
-    admissionNumber: 'STA003',
-    fullName: 'Musa Abdullahi',
-    class: 'JSS 2A',
-    parentName: 'Abdullahi Musa',
-    parentContact: '+234 807 456 7890',
-    dateOfBirth: '2008-03-10',
-  },
-];
+interface Student {
+  id: string;
+  admission_number: string;
+  full_name: string;
+  class_id: string;
+  parent_name: string;
+  parent_contact: string;
+  date_of_birth: string;
+  classes: {
+    name: string;
+  };
+}
 
-const classes = ['JSS 1A', 'JSS 1B', 'JSS 2A', 'JSS 2B', 'JSS 3A', 'SS 1A', 'SS 1B', 'SS 2A', 'SS 3A'];
+interface Class {
+  id: string;
+  name: string;
+}
 
 export default function Students() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClass, setSelectedClass] = useState('all');
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchStudents();
+    fetchClasses();
+  }, []);
+
+  const fetchStudents = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select(`
+          *,
+          classes (
+            name
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setStudents(data || []);
+    } catch (error) {
+      console.error('Error fetching students:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch students",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchClasses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('classes')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      setClasses(data || []);
+    } catch (error) {
+      console.error('Error fetching classes:', error);
+    }
+  };
 
   const filteredStudents = students.filter(student => {
-    const matchesSearch = student.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         student.admissionNumber.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesClass = !selectedClass || selectedClass === "all" || student.class === selectedClass;
+    const matchesSearch = student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         student.admission_number.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesClass = selectedClass === "all" || student.class_id === selectedClass;
     return matchesSearch && matchesClass;
   });
 
+  const handleStudentClick = (studentId: string) => {
+    navigate(`/student/${studentId}`);
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex justify-between items-center"
+        className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
       >
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Students</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Students</h1>
           <p className="text-muted-foreground">Manage student records and information</p>
         </div>
         
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="btn-gold">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Student
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Add New Student</DialogTitle>
-              <DialogDescription>
-                Enter the student's information below.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="fullName">Full Name</Label>
-                <Input id="fullName" placeholder="Enter full name" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="admissionNumber">Admission Number</Label>
-                <Input id="admissionNumber" placeholder="e.g., STA001" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="class">Class</Label>
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select class" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {classes.map((cls) => (
-                      <SelectItem key={cls} value={cls}>
-                        {cls}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="parentName">Parent Name</Label>
-                <Input id="parentName" placeholder="Enter parent's name" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="parentContact">Parent Contact</Label>
-                <Input id="parentContact" placeholder="+234 XXX XXX XXXX" />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button className="btn-gold" onClick={() => setIsAddDialogOpen(false)}>
-                Add Student
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <Button className="btn-gold w-full md:w-auto" onClick={() => navigate('/data-entry')}>
+          <Plus className="w-4 h-4 mr-2" />
+          Add Student
+        </Button>
       </motion.div>
 
-      {/* Search and Filter */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="flex gap-4"
+        className="flex flex-col md:flex-row gap-4"
       >
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
@@ -163,31 +142,30 @@ export default function Students() {
           />
         </div>
         <Select value={selectedClass} onValueChange={setSelectedClass}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full md:w-48">
             <SelectValue placeholder="Filter by class" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Classes</SelectItem>
             {classes.map((cls) => (
-              <SelectItem key={cls} value={cls}>
-                {cls}
+              <SelectItem key={cls.id} value={cls.id}>
+                {cls.name}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </motion.div>
 
-      {/* Students Table */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
       >
-        <Card className="card-premium">
+        <Card>
           <CardHeader>
-            <CardTitle>Student List</CardTitle>
+            <CardTitle>Student Records</CardTitle>
             <CardDescription>
-              {filteredStudents.length} students found
+              {loading ? "Loading students..." : `${filteredStudents.length} students found`}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -200,44 +178,61 @@ export default function Students() {
                     <TableHead>Class</TableHead>
                     <TableHead>Parent Name</TableHead>
                     <TableHead>Parent Contact</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredStudents.map((student, index) => (
-                    <motion.tr
-                      key={student.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      className="hover:bg-muted/50"
-                    >
-                      <TableCell className="font-medium">
-                        {student.admissionNumber}
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, index) => (
+                      <TableRow key={index}>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-8 w-24" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : filteredStudents.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        No students found
                       </TableCell>
-                      <TableCell>{student.fullName}</TableCell>
-                      <TableCell>
-                        <span className="px-2 py-1 bg-primary/10 text-primary rounded-md text-sm">
-                          {student.class}
-                        </span>
-                      </TableCell>
-                      <TableCell>{student.parentName}</TableCell>
-                      <TableCell>{student.parentContact}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end space-x-2">
-                          <Button variant="ghost" size="sm">
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm">
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="text-destructive">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </motion.tr>
-                  ))}
+                    </TableRow>
+                  ) : (
+                    filteredStudents.map((student, index) => (
+                      <motion.tr
+                        key={student.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="hover:bg-muted/50 cursor-pointer"
+                        onClick={() => handleStudentClick(student.id)}
+                      >
+                        <TableCell className="font-medium">{student.admission_number}</TableCell>
+                        <TableCell>{student.full_name}</TableCell>
+                        <TableCell>{student.classes?.name}</TableCell>
+                        <TableCell>{student.parent_name}</TableCell>
+                        <TableCell>{student.parent_contact}</TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button variant="ghost" size="sm" onClick={(e) => {
+                              e.stopPropagation();
+                              handleStudentClick(student.id);
+                            }}>
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </motion.tr>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>

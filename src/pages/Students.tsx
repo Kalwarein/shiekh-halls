@@ -65,7 +65,7 @@ const classes = ['JSS 1A', 'JSS 1B', 'JSS 2A', 'JSS 2B', 'JSS 3A', 'SS 1A', 'SS 
 
 export default function Students() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedClass, setSelectedClass] = useState('');
+  const [selectedClass, setSelectedClass] = useState('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   const filteredStudents = students.filter(student => {

@@ -77,8 +77,8 @@ const subjects = ['Mathematics', 'English Language', 'Physics', 'Chemistry', 'Bi
 
 export default function ReportCards() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedClass, setSelectedClass] = useState('');
-  const [selectedTerm, setSelectedTerm] = useState('');
+  const [selectedClass, setSelectedClass] = useState('all');
+  const [selectedTerm, setSelectedTerm] = useState('all');
   const [selectedYear, setSelectedYear] = useState('2024');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 

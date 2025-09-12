@@ -97,8 +97,8 @@ export default function Finance() {
   const filteredPayments = payments.filter(payment => {
     const matchesSearch = payment.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          payment.admissionNumber.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesClass = !selectedClass || payment.class === selectedClass;
-    const matchesStatus = !selectedStatus || payment.status === selectedStatus;
+    const matchesClass = !selectedClass || selectedClass === "all" || payment.class === selectedClass;
+    const matchesStatus = !selectedStatus || selectedStatus === "all" || payment.status === selectedStatus;
     return matchesSearch && matchesClass && matchesStatus;
   });
 
@@ -299,7 +299,7 @@ export default function Finance() {
                 <SelectValue placeholder="Filter by class" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Classes</SelectItem>
+                <SelectItem value="all">All Classes</SelectItem>
                 {classes.map((cls) => (
                   <SelectItem key={cls} value={cls}>
                     {cls}
@@ -312,7 +312,7 @@ export default function Finance() {
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Statuses</SelectItem>
+                <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="paid">Paid</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="overdue">Overdue</SelectItem>

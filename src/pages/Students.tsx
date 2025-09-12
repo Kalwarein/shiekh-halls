@@ -71,7 +71,7 @@ export default function Students() {
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          student.admissionNumber.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesClass = !selectedClass || student.class === selectedClass;
+    const matchesClass = !selectedClass || selectedClass === "all" || student.class === selectedClass;
     return matchesSearch && matchesClass;
   });
 
@@ -167,7 +167,7 @@ export default function Students() {
             <SelectValue placeholder="Filter by class" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Classes</SelectItem>
+            <SelectItem value="all">All Classes</SelectItem>
             {classes.map((cls) => (
               <SelectItem key={cls} value={cls}>
                 {cls}

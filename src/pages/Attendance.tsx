@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Save, BarChart3, Users } from 'lucide-react';
+import { Calendar, Save, BarChart3, Users, User, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -13,52 +13,249 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
 
-// Mock data
-const students = [
-  { id: '1', name: 'Ahmed Ibrahim', admissionNumber: 'STA001', class: 'JSS 1A' },
-  { id: '2', name: 'Fatima Abubakar', admissionNumber: 'STA002', class: 'JSS 1A' },
-  { id: '3', name: 'Musa Abdullahi', admissionNumber: 'STA003', class: 'JSS 1A' },
-  { id: '4', name: 'Aisha Mohammed', admissionNumber: 'STA004', class: 'JSS 1A' },
-  { id: '5', name: 'Ibrahim Hassan', admissionNumber: 'STA005', class: 'JSS 1A' },
-];
+interface Student {
+  id: string;
+  full_name: string;
+  admission_number: string;
+  class_id: string;
+  classes?: {
+    name: string;
+  };
+}
 
-const attendanceData = [
-  { class: 'JSS 1A', percentage: 87 },
-  { class: 'JSS 1B', percentage: 92 },
-  { class: 'JSS 2A', percentage: 89 },
-  { class: 'JSS 2B', percentage: 85 },
-  { class: 'JSS 3A', percentage: 91 },
-  { class: 'SS 1A', percentage: 88 },
-];
-
-const classes = ['JSS 1A', 'JSS 1B', 'JSS 2A', 'JSS 2B', 'JSS 3A', 'SS 1A', 'SS 1B', 'SS 2A', 'SS 3A'];
+interface AttendanceRecord {
+  student_id: string;
+  is_present: boolean;
+  remarks?: string;
+}
 
 export default function Attendance() {
-  const [selectedClass, setSelectedClass] = useState('JSS 1A');
+  const [selectedClass, setSelectedClass] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [attendance, setAttendance] = useState<Record<string, boolean>>({});
+  const [attendance, setAttendance] = useState<Record<string, AttendanceRecord>>({});
+  const [remarks, setRemarks] = useState<Record<string, string>>({});
+  
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Fetch classes
+  const { data: classes = [], isLoading: classesLoading } = useQuery({
+    queryKey: ['classes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('classes')
+        .select('*')
+        .order('name');
+      
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  // Auto-select first class when classes load
+  useEffect(() => {
+    if (classes.length > 0 && !selectedClass) {
+      setSelectedClass(classes[0].id);
+    }
+  }, [classes, selectedClass]);
+
+  // Fetch students for selected class
+  const { data: students = [], isLoading: studentsLoading } = useQuery({
+    queryKey: ['students-by-class', selectedClass],
+    queryFn: async () => {
+      if (!selectedClass) return [];
+      
+      const { data, error } = await supabase
+        .from('students')
+        .select(`
+          id,
+          full_name,
+          admission_number,
+          class_id,
+          classes (
+            name
+          )
+        `)
+        .eq('class_id', selectedClass)
+        .order('full_name');
+      
+      if (error) throw error;
+      return data as Student[];
+    },
+    enabled: !!selectedClass
+  });
+
+  // Fetch existing attendance for selected date and class
+  const { data: existingAttendance = [], refetch: refetchAttendance } = useQuery({
+    queryKey: ['attendance', selectedClass, selectedDate],
+    queryFn: async () => {
+      if (!selectedClass || !selectedDate) return [];
+      
+      const { data, error } = await supabase
+        .from('attendance')
+        .select('*')
+        .eq('attendance_date', selectedDate)
+        .in('student_id', students.map(s => s.id));
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedClass && !!selectedDate && students.length > 0
+  });
+
+  // Fetch attendance statistics
+  const { data: attendanceStats = [], isLoading: statsLoading } = useQuery({
+    queryKey: ['attendance-stats'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('attendance')
+        .select(`
+          student_id,
+          is_present,
+          students (
+            classes (
+              name
+            )
+          )
+        `)
+        .gte('attendance_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+      
+      if (error) throw error;
+      
+      // Group by class and calculate percentages
+      const classStats = data.reduce((acc, record) => {
+        const className = record.students?.classes?.name;
+        if (!className) return acc;
+        
+        if (!acc[className]) {
+          acc[className] = { present: 0, total: 0 };
+        }
+        
+        acc[className].total++;
+        if (record.is_present) {
+          acc[className].present++;
+        }
+        
+        return acc;
+      }, {} as Record<string, { present: number; total: number }>);
+      
+      return Object.entries(classStats).map(([className, stats]) => ({
+        class: className,
+        percentage: Math.round((stats.present / stats.total) * 100)
+      }));
+    }
+  });
+
+  // Initialize attendance from existing records
+  useEffect(() => {
+    if (existingAttendance.length > 0) {
+      const attendanceMap: Record<string, AttendanceRecord> = {};
+      const remarksMap: Record<string, string> = {};
+      
+      existingAttendance.forEach(record => {
+        attendanceMap[record.student_id] = {
+          student_id: record.student_id,
+          is_present: record.is_present,
+          remarks: record.remarks
+        };
+        if (record.remarks) {
+          remarksMap[record.student_id] = record.remarks;
+        }
+      });
+      
+      setAttendance(attendanceMap);
+      setRemarks(remarksMap);
+    } else {
+      setAttendance({});
+      setRemarks({});
+    }
+  }, [existingAttendance]);
+
+  // Save attendance mutation
+  const saveAttendanceMutation = useMutation({
+    mutationFn: async () => {
+      const attendanceRecords = Object.values(attendance).map(record => ({
+        student_id: record.student_id,
+        attendance_date: selectedDate,
+        is_present: record.is_present,
+        remarks: remarks[record.student_id] || null,
+        marked_by: null
+      }));
+
+      // Delete existing records for this date and class
+      const studentIds = students.map(s => s.id);
+      await supabase
+        .from('attendance')
+        .delete()
+        .eq('attendance_date', selectedDate)
+        .in('student_id', studentIds);
+
+      // Insert new records
+      const { error } = await supabase
+        .from('attendance')
+        .insert(attendanceRecords);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance-stats'] });
+      toast({
+        title: "Success",
+        description: "Attendance saved successfully",
+      });
+    },
+    onError: (error) => {
+      console.error('Error saving attendance:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save attendance",
+        variant: "destructive",
+      });
+    }
+  });
 
   const handleAttendanceChange = (studentId: string, isPresent: boolean) => {
     setAttendance(prev => ({
       ...prev,
-      [studentId]: isPresent
+      [studentId]: {
+        student_id: studentId,
+        is_present: isPresent,
+      }
+    }));
+  };
+
+  const handleRemarksChange = (studentId: string, remarksText: string) => {
+    setRemarks(prev => ({
+      ...prev,
+      [studentId]: remarksText
     }));
   };
 
   const handleSaveAttendance = () => {
-    console.log('Saving attendance:', {
-      class: selectedClass,
-      date: selectedDate,
-      attendance
-    });
-    // Here you would typically save to your backend
+    if (Object.keys(attendance).length === 0) {
+      toast({
+        title: "No Changes",
+        description: "Please mark attendance for at least one student",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    saveAttendanceMutation.mutate();
   };
 
-  const presentCount = Object.values(attendance).filter(Boolean).length;
+  const presentCount = Object.values(attendance).filter(record => record.is_present).length;
   const totalStudents = students.length;
   const attendancePercentage = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
+
+  const selectedClassName = classes.find(c => c.id === selectedClass)?.name || '';
 
   return (
     <div className="space-y-6">
@@ -67,7 +264,7 @@ export default function Attendance() {
         animate={{ opacity: 1, y: 0 }}
         className="space-y-2"
       >
-        <h1 className="text-3xl font-bold text-foreground">Attendance</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Attendance</h1>
         <p className="text-muted-foreground">Mark and track student attendance records</p>
       </motion.div>
 
@@ -76,22 +273,26 @@ export default function Attendance() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="grid grid-cols-1 md:grid-cols-3 gap-4"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
       >
         <div className="space-y-2">
           <Label htmlFor="class">Select Class</Label>
-          <Select value={selectedClass} onValueChange={setSelectedClass}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select class" />
-            </SelectTrigger>
-            <SelectContent>
-              {classes.map((cls) => (
-                <SelectItem key={cls} value={cls}>
-                  {cls}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {classesLoading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : (
+            <Select value={selectedClass} onValueChange={setSelectedClass}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select class" />
+              </SelectTrigger>
+              <SelectContent>
+                {classes.map((cls) => (
+                  <SelectItem key={cls.id} value={cls.id}>
+                    {cls.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="date">Select Date</Label>
@@ -102,16 +303,20 @@ export default function Attendance() {
             onChange={(e) => setSelectedDate(e.target.value)}
           />
         </div>
-        <div className="flex items-end">
-          <Button onClick={handleSaveAttendance} className="btn-gold w-full">
+        <div className="flex items-end sm:col-span-2 lg:col-span-2">
+          <Button 
+            onClick={handleSaveAttendance} 
+            className="btn-gold w-full"
+            disabled={saveAttendanceMutation.isPending}
+          >
             <Save className="w-4 h-4 mr-2" />
-            Save Attendance
+            {saveAttendanceMutation.isPending ? 'Saving...' : 'Save Attendance'}
           </Button>
         </div>
       </motion.div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -123,7 +328,11 @@ export default function Attendance() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalStudents}</div>
+              {studentsLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div className="text-2xl font-bold">{totalStudents}</div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -170,7 +379,10 @@ export default function Attendance() {
         >
           <Card className="card-premium">
             <CardHeader>
-              <CardTitle>Mark Attendance - {selectedClass}</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                Mark Attendance - {selectedClassName}
+              </CardTitle>
               <CardDescription>
                 {new Date(selectedDate).toLocaleDateString('en-US', {
                   weekday: 'long',
@@ -181,32 +393,75 @@ export default function Attendance() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {students.map((student, index) => (
-                  <motion.div
-                    key={student.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50"
-                  >
-                    <div>
-                      <p className="font-medium">{student.name}</p>
-                      <p className="text-sm text-muted-foreground">{student.admissionNumber}</p>
+              {studentsLoading ? (
+                <div className="space-y-4">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="h-10 w-10 rounded-full" />
+                        <div className="space-y-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      </div>
+                      <Skeleton className="h-5 w-16" />
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`present-${student.id}`}
-                        checked={attendance[student.id] || false}
-                        onCheckedChange={(checked) => 
-                          handleAttendanceChange(student.id, checked as boolean)
-                        }
-                      />
-                      <Label htmlFor={`present-${student.id}`}>Present</Label>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : students.length === 0 ? (
+                <div className="text-center py-8">
+                  <User className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">
+                    {selectedClass ? 'No students found in this class' : 'Please select a class'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {students.map((student, index) => (
+                    <motion.div
+                      key={student.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="p-3 border rounded-lg hover:bg-muted/50 space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                            <User className="w-5 h-5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="font-medium">{student.full_name}</p>
+                            <p className="text-sm text-muted-foreground">{student.admission_number}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`present-${student.id}`}
+                            checked={attendance[student.id]?.is_present || false}
+                            onCheckedChange={(checked) => 
+                              handleAttendanceChange(student.id, checked as boolean)
+                            }
+                          />
+                          <Label htmlFor={`present-${student.id}`}>Present</Label>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor={`remarks-${student.id}`} className="text-xs">
+                          Remarks (optional)
+                        </Label>
+                        <Input
+                          id={`remarks-${student.id}`}
+                          placeholder="Add remarks..."
+                          value={remarks[student.id] || ''}
+                          onChange={(e) => handleRemarksChange(student.id, e.target.value)}
+                          className="text-sm"
+                        />
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -220,22 +475,39 @@ export default function Attendance() {
           <Card className="card-premium">
             <CardHeader>
               <CardTitle>Class Attendance Overview</CardTitle>
-              <CardDescription>Average attendance by class</CardDescription>
+              <CardDescription>Average attendance by class (Last 30 days)</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={attendanceData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="class" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => `${value}%`} />
-                  <Bar 
-                    dataKey="percentage" 
-                    fill="hsl(var(--primary))" 
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
+              {statsLoading ? (
+                <Skeleton className="h-[300px] w-full" />
+              ) : attendanceStats.length === 0 ? (
+                <div className="h-[300px] flex items-center justify-center">
+                  <div className="text-center">
+                    <BarChart3 className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No attendance data available</p>
+                  </div>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={attendanceStats}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="class" 
+                      fontSize={12}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis fontSize={12} />
+                    <Tooltip formatter={(value) => `${value}%`} />
+                    <Bar 
+                      dataKey="percentage" 
+                      fill="hsl(var(--primary))" 
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
         </motion.div>

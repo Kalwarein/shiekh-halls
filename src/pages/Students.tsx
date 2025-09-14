@@ -61,12 +61,7 @@ export default function Students() {
     try {
       const { data, error } = await supabase
         .from('students')
-        .select(`
-          *,
-          classes (
-            name
-          )
-        `)
+        .select(`*, classes ( name )`)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -98,8 +93,9 @@ export default function Students() {
   };
 
   const filteredStudents = students.filter(student => {
-    const matchesSearch = student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         student.admission_number.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch =
+      student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      student.admission_number.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesClass = selectedClass === "all" || student.class_id === selectedClass;
     return matchesSearch && matchesClass;
   });
@@ -109,40 +105,49 @@ export default function Students() {
   };
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-6 p-4 md:p-6 lg:p-10 max-w-7xl mx-auto">
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
       >
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Students</h1>
-          <p className="text-muted-foreground">Manage student records and information</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+            Students
+          </h1>
+          <p className="text-muted-foreground text-sm md:text-base">
+            Manage student records and information
+          </p>
         </div>
-        
-        <Button className="btn-gold w-full md:w-auto" onClick={() => navigate('/data-entry')}>
+
+        <Button className="btn-gold w-full sm:w-auto" onClick={() => navigate('/data-entry')}>
           <Plus className="w-4 h-4 mr-2" />
           Add Student
         </Button>
       </motion.div>
 
+      {/* Filters */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="flex flex-col md:flex-row gap-4"
+        className="flex flex-col sm:flex-row gap-3 sm:gap-4"
       >
-        <div className="relative flex-1">
+        {/* Search Bar */}
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
           <Input
             placeholder="Search students by name or admission number..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className="pl-10 w-full"
           />
         </div>
+
+        {/* Class Filter */}
         <Select value={selectedClass} onValueChange={setSelectedClass}>
-          <SelectTrigger className="w-full md:w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder="Filter by class" />
           </SelectTrigger>
           <SelectContent>
@@ -156,21 +161,24 @@ export default function Students() {
         </Select>
       </motion.div>
 
+      {/* Table */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
       >
-        <Card>
+        <Card className="shadow-md rounded-xl">
           <CardHeader>
             <CardTitle>Student Records</CardTitle>
-            <CardDescription>
-              {loading ? "Loading students..." : `${filteredStudents.length} students found`}
+            <CardDescription className="text-sm md:text-base">
+              {loading
+                ? "Loading students..."
+                : `${filteredStudents.length} students found`}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
+            <div className="overflow-x-auto rounded-md">
+              <Table className="min-w-[600px] text-sm md:text-base">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Admission No.</TableHead>
@@ -178,7 +186,7 @@ export default function Students() {
                     <TableHead>Class</TableHead>
                     <TableHead>Parent Name</TableHead>
                     <TableHead>Parent Contact</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead className="text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -190,7 +198,7 @@ export default function Students() {
                         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                        <TableCell><Skeleton className="h-8 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-8 w-24 mx-auto" /></TableCell>
                       </TableRow>
                     ))
                   ) : filteredStudents.length === 0 ? (
@@ -215,11 +223,15 @@ export default function Students() {
                         <TableCell>{student.parent_name}</TableCell>
                         <TableCell>{student.parent_contact}</TableCell>
                         <TableCell>
-                          <div className="flex space-x-2">
-                            <Button variant="ghost" size="sm" onClick={(e) => {
-                              e.stopPropagation();
-                              handleStudentClick(student.id);
-                            }}>
+                          <div className="flex justify-center space-x-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStudentClick(student.id);
+                              }}
+                            >
                               <Eye className="w-4 h-4" />
                             </Button>
                             <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>

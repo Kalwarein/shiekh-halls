@@ -120,7 +120,10 @@ export function AppSidebar() {
                             : 'text-sidebar-foreground hover:bg-sidebar-accent/50'
                         }`
                       }
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={() => {
+                        // Allow default navigation behavior
+                        // Sidebar will auto-close on mobile after navigation
+                      }}
                     >
                       <motion.div
                         initial={{ opacity: 0, x: -10 }}

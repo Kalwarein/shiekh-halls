@@ -177,7 +177,10 @@ export default function ReportCards() {
         // Update existing record
         const { data, error } = await supabase
           .from('report_cards')
-          .update(gradeData)
+          .update({
+            ...gradeData,
+            term: gradeData.term as 'first' | 'second' | 'third'
+          })
           .eq('id', existing.id)
           .select()
           .single();
@@ -188,7 +191,10 @@ export default function ReportCards() {
         // Insert new record
         const { data, error } = await supabase
           .from('report_cards')
-          .insert([gradeData])
+          .insert([{
+            ...gradeData,
+            term: gradeData.term as 'first' | 'second' | 'third'
+          }])
           .select()
           .single();
         

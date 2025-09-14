@@ -91,7 +91,11 @@ export function AppSidebar() {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
-                  <NavLink to="/data-entry" className="btn-gold">
+                  <NavLink 
+                    to="/data-entry" 
+                    className="bg-gradient-to-r from-primary to-yellow-400 text-primary-foreground hover:from-primary/90 hover:to-yellow-400/90 font-medium rounded-md px-4 py-2 transition-all duration-200"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     + Add New
                   </NavLink>
                 </SidebarMenuButton>
@@ -116,6 +120,7 @@ export function AppSidebar() {
                             : 'text-sidebar-foreground hover:bg-sidebar-accent/50'
                         }`
                       }
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <motion.div
                         initial={{ opacity: 0, x: -10 }}

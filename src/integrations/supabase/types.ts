@@ -62,6 +62,33 @@ export type Database = {
           },
         ]
       }
+      attendance_notifications: {
+        Row: {
+          class_id: string
+          created_at: string
+          id: string
+          is_enabled: boolean
+          notification_time: string
+          updated_at: string
+        }
+        Insert: {
+          class_id: string
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          notification_time?: string
+          updated_at?: string
+        }
+        Update: {
+          class_id?: string
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          notification_time?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       classes: {
         Row: {
           capacity: number | null

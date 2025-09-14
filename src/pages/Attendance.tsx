@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Save, BarChart3, Users, User, Clock } from 'lucide-react';
+import { Calendar, Save, BarChart3, Users, User, Clock, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -14,10 +14,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { AttendanceNotifications } from '@/components/AttendanceNotifications';
 
 interface Student {
   id: string;
@@ -258,15 +260,31 @@ export default function Attendance() {
   const selectedClassName = classes.find(c => c.id === selectedClass)?.name || '';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="space-y-2"
       >
-        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Attendance</h1>
-        <p className="text-muted-foreground">Mark and track student attendance records</p>
+        <h1 className="text-3xl font-bold tracking-tight">Attendance Management</h1>
+        <p className="text-muted-foreground">
+          Track and manage student attendance efficiently with notifications and insights.
+        </p>
       </motion.div>
+
+      <Tabs defaultValue="attendance" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="attendance" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Take Attendance
+          </TabsTrigger>
+          <TabsTrigger value="notifications" className="flex items-center gap-2">
+            <Bell className="h-4 w-4" />
+            Notifications
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="attendance" className="space-y-6">
 
       {/* Controls */}
       <motion.div
@@ -512,6 +530,12 @@ export default function Attendance() {
           </Card>
         </motion.div>
       </div>
+        </TabsContent>
+
+        <TabsContent value="notifications">
+          <AttendanceNotifications />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

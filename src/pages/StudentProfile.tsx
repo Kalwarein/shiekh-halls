@@ -25,7 +25,7 @@ export default function StudentProfile() {
           classes (
             id,
             name,
-            teacher_name
+            name
           )
         `)
         .eq('id', id)
@@ -51,7 +51,8 @@ export default function StudentProfile() {
             term,
             academic_year,
             amount,
-            description
+            fee_type,
+            amount
           )
         `)
         .eq('student_id', id)
@@ -211,7 +212,7 @@ export default function StudentProfile() {
 
                 <div className="flex items-center gap-2">
                   <Phone className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm">{student.parent_contact}</span>
+                  <span className="text-sm">{student.parent_phone}</span>
                 </div>
 
                 {student.parent_email && (

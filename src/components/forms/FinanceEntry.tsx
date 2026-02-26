@@ -61,7 +61,7 @@ export function FinanceEntry({ onSuccess }: FinanceEntryProps) {
           term,
           amount,
           academic_year,
-          description,
+          fee_type,
           classes (name)
         `)
         .order('academic_year', { ascending: false });

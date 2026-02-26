@@ -106,7 +106,7 @@ export function StudentForm({ onSuccess }: StudentFormProps) {
           admission_number: admissionNumber,
           class_id: data.classId,
           parent_name: parentName,
-          parent_contact: data.parentPhone1,
+          parent_phone: data.parentPhone1,
           parent_email: data.parentEmail || null,
           address: data.address || null,
           date_of_birth: data.dateOfBirth || null

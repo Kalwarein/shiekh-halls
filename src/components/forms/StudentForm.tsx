@@ -14,6 +14,7 @@ import { X, Plus, Upload, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
+import { useAcademicYear } from '@/hooks/useAcademicYear';
 
 const studentSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -40,6 +41,7 @@ export function StudentForm({ onSuccess }: StudentFormProps) {
   const [newBadge, setNewBadge] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const { selectedYearId } = useAcademicYear();
 
   const { data: classes, isLoading: classesLoading } = useQuery({
     queryKey: ['classes'],
@@ -109,7 +111,8 @@ export function StudentForm({ onSuccess }: StudentFormProps) {
           parent_phone: data.parentPhone1,
           parent_email: data.parentEmail || null,
           address: data.address || null,
-          date_of_birth: data.dateOfBirth || null
+          date_of_birth: data.dateOfBirth || null,
+          academic_year_id: selectedYearId || null
         });
 
       if (error) throw error;

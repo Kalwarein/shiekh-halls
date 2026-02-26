@@ -14,8 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      academic_years: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       attendance: {
         Row: {
+          academic_year_id: string | null
           attendance_date: string
           created_at: string
           id: string
@@ -25,6 +50,7 @@ export type Database = {
           student_id: string
         }
         Insert: {
+          academic_year_id?: string | null
           attendance_date: string
           created_at?: string
           id?: string
@@ -34,6 +60,7 @@ export type Database = {
           student_id: string
         }
         Update: {
+          academic_year_id?: string | null
           attendance_date?: string
           created_at?: string
           id?: string
@@ -43,6 +70,13 @@ export type Database = {
           student_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "attendance_academic_year_id_fkey"
+            columns: ["academic_year_id"]
+            isOneToOne: false
+            referencedRelation: "academic_years"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "attendance_student_id_fkey"
             columns: ["student_id"]
@@ -113,6 +147,7 @@ export type Database = {
       }
       fee_payments: {
         Row: {
+          academic_year_id: string | null
           amount_paid: number
           created_at: string
           fee_structure_id: string | null
@@ -125,6 +160,7 @@ export type Database = {
           student_id: string
         }
         Insert: {
+          academic_year_id?: string | null
           amount_paid?: number
           created_at?: string
           fee_structure_id?: string | null
@@ -137,6 +173,7 @@ export type Database = {
           student_id: string
         }
         Update: {
+          academic_year_id?: string | null
           amount_paid?: number
           created_at?: string
           fee_structure_id?: string | null
@@ -149,6 +186,13 @@ export type Database = {
           student_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "fee_payments_academic_year_id_fkey"
+            columns: ["academic_year_id"]
+            isOneToOne: false
+            referencedRelation: "academic_years"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fee_payments_fee_structure_id_fkey"
             columns: ["fee_structure_id"]
@@ -206,6 +250,7 @@ export type Database = {
       report_cards: {
         Row: {
           academic_year: string
+          academic_year_id: string | null
           created_at: string
           grade: string | null
           id: string
@@ -218,6 +263,7 @@ export type Database = {
         }
         Insert: {
           academic_year: string
+          academic_year_id?: string | null
           created_at?: string
           grade?: string | null
           id?: string
@@ -230,6 +276,7 @@ export type Database = {
         }
         Update: {
           academic_year?: string
+          academic_year_id?: string | null
           created_at?: string
           grade?: string | null
           id?: string
@@ -241,6 +288,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "report_cards_academic_year_id_fkey"
+            columns: ["academic_year_id"]
+            isOneToOne: false
+            referencedRelation: "academic_years"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "report_cards_student_id_fkey"
             columns: ["student_id"]
@@ -259,6 +313,7 @@ export type Database = {
       }
       students: {
         Row: {
+          academic_year_id: string | null
           address: string | null
           admission_number: string | null
           badges: string[] | null
@@ -273,6 +328,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          academic_year_id?: string | null
           address?: string | null
           admission_number?: string | null
           badges?: string[] | null
@@ -287,6 +343,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          academic_year_id?: string | null
           address?: string | null
           admission_number?: string | null
           badges?: string[] | null
@@ -302,6 +359,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "students_academic_year_id_fkey"
+            columns: ["academic_year_id"]
+            isOneToOne: false
+            referencedRelation: "academic_years"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "students_class_id_fkey"
             columns: ["class_id"]
             isOneToOne: false
@@ -316,21 +380,27 @@ export type Database = {
           code: string
           created_at: string
           id: string
+          is_active: boolean
           name: string
+          updated_at: string
         }
         Insert: {
           class_id?: string | null
           code: string
           created_at?: string
           id?: string
+          is_active?: boolean
           name: string
+          updated_at?: string
         }
         Update: {
           class_id?: string | null
           code?: string
           created_at?: string
           id?: string
+          is_active?: boolean
           name?: string
+          updated_at?: string
         }
         Relationships: [
           {

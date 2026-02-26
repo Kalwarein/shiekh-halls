@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAcademicYear } from '@/hooks/useAcademicYear';
 
 interface FinanceEntryProps {
   onSuccess: () => void;
@@ -24,6 +25,7 @@ export function FinanceEntry({ onSuccess }: FinanceEntryProps) {
   const [notes, setNotes] = useState('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { selectedYearId } = useAcademicYear();
 
   // Fetch students with search
   const { data: students, isLoading: studentsLoading } = useQuery({
@@ -90,7 +92,8 @@ export function FinanceEntry({ onSuccess }: FinanceEntryProps) {
           payment_method: paymentData.paymentMethod,
           receipt_number: paymentData.receiptNumber,
           notes: paymentData.notes,
-          status: 'paid'
+          status: 'paid',
+          academic_year_id: selectedYearId || null
         });
 
       if (error) throw error;

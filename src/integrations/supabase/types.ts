@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -23,17 +23,15 @@ export type Database = {
           marked_by: string | null
           remarks: string | null
           student_id: string
-          updated_at: string
         }
         Insert: {
-          attendance_date?: string
+          attendance_date: string
           created_at?: string
           id?: string
           is_present?: boolean
           marked_by?: string | null
           remarks?: string | null
           student_id: string
-          updated_at?: string
         }
         Update: {
           attendance_date?: string
@@ -43,16 +41,8 @@ export type Database = {
           marked_by?: string | null
           remarks?: string | null
           student_id?: string
-          updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "attendance_marked_by_fkey"
-            columns: ["marked_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "attendance_student_id_fkey"
             columns: ["student_id"]
@@ -64,55 +54,60 @@ export type Database = {
       }
       attendance_notifications: {
         Row: {
-          class_id: string
           created_at: string
           id: string
-          is_enabled: boolean
-          notification_time: string
-          updated_at: string
+          is_read: boolean | null
+          message: string
+          notification_type: string
+          sent_at: string
+          student_id: string
         }
         Insert: {
-          class_id: string
           created_at?: string
           id?: string
-          is_enabled?: boolean
-          notification_time?: string
-          updated_at?: string
+          is_read?: boolean | null
+          message: string
+          notification_type: string
+          sent_at?: string
+          student_id: string
         }
         Update: {
-          class_id?: string
           created_at?: string
           id?: string
-          is_enabled?: boolean
-          notification_time?: string
-          updated_at?: string
+          is_read?: boolean | null
+          message?: string
+          notification_type?: string
+          sent_at?: string
+          student_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "attendance_notifications_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       classes: {
         Row: {
-          capacity: number | null
           created_at: string
           id: string
+          level: string | null
           name: string
-          teacher_name: string | null
-          updated_at: string
         }
         Insert: {
-          capacity?: number | null
           created_at?: string
           id?: string
+          level?: string | null
           name: string
-          teacher_name?: string | null
-          updated_at?: string
         }
         Update: {
-          capacity?: number | null
           created_at?: string
           id?: string
+          level?: string | null
           name?: string
-          teacher_name?: string | null
-          updated_at?: string
         }
         Relationships: []
       }
@@ -120,41 +115,38 @@ export type Database = {
         Row: {
           amount_paid: number
           created_at: string
-          fee_structure_id: string
+          fee_structure_id: string | null
           id: string
           notes: string | null
           payment_date: string
           payment_method: string | null
           receipt_number: string | null
-          status: Database["public"]["Enums"]["payment_status"]
+          status: string | null
           student_id: string
-          updated_at: string
         }
         Insert: {
-          amount_paid: number
+          amount_paid?: number
           created_at?: string
-          fee_structure_id: string
+          fee_structure_id?: string | null
           id?: string
           notes?: string | null
           payment_date?: string
           payment_method?: string | null
           receipt_number?: string | null
-          status?: Database["public"]["Enums"]["payment_status"]
+          status?: string | null
           student_id: string
-          updated_at?: string
         }
         Update: {
           amount_paid?: number
           created_at?: string
-          fee_structure_id?: string
+          fee_structure_id?: string | null
           id?: string
           notes?: string | null
           payment_date?: string
           payment_method?: string | null
           receipt_number?: string | null
-          status?: Database["public"]["Enums"]["payment_status"]
+          status?: string | null
           student_id?: string
-          updated_at?: string
         }
         Relationships: [
           {
@@ -175,31 +167,31 @@ export type Database = {
       }
       fee_structures: {
         Row: {
-          academic_year: string
+          academic_year: string | null
           amount: number
-          class_id: string
+          class_id: string | null
           created_at: string
-          description: string | null
+          fee_type: string
           id: string
-          term: Database["public"]["Enums"]["term"]
+          term: string | null
         }
         Insert: {
-          academic_year: string
-          amount: number
-          class_id: string
+          academic_year?: string | null
+          amount?: number
+          class_id?: string | null
           created_at?: string
-          description?: string | null
+          fee_type: string
           id?: string
-          term: Database["public"]["Enums"]["term"]
+          term?: string | null
         }
         Update: {
-          academic_year?: string
+          academic_year?: string | null
           amount?: number
-          class_id?: string
+          class_id?: string | null
           created_at?: string
-          description?: string | null
+          fee_type?: string
           id?: string
-          term?: Database["public"]["Enums"]["term"]
+          term?: string | null
         }
         Relationships: [
           {
@@ -211,33 +203,6 @@ export type Database = {
           },
         ]
       }
-      profiles: {
-        Row: {
-          created_at: string
-          full_name: string
-          id: string
-          role: Database["public"]["Enums"]["user_role"]
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          full_name: string
-          id?: string
-          role?: Database["public"]["Enums"]["user_role"]
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          full_name?: string
-          id?: string
-          role?: Database["public"]["Enums"]["user_role"]
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       report_cards: {
         Row: {
           academic_year: string
@@ -245,10 +210,10 @@ export type Database = {
           grade: string | null
           id: string
           remarks: string | null
-          score: number
+          score: number | null
           student_id: string
           subject_id: string
-          term: Database["public"]["Enums"]["term"]
+          term: string
           updated_at: string
         }
         Insert: {
@@ -257,10 +222,10 @@ export type Database = {
           grade?: string | null
           id?: string
           remarks?: string | null
-          score: number
+          score?: number | null
           student_id: string
           subject_id: string
-          term: Database["public"]["Enums"]["term"]
+          term: string
           updated_at?: string
         }
         Update: {
@@ -269,10 +234,10 @@ export type Database = {
           grade?: string | null
           id?: string
           remarks?: string | null
-          score?: number
+          score?: number | null
           student_id?: string
           subject_id?: string
-          term?: Database["public"]["Enums"]["term"]
+          term?: string
           updated_at?: string
         }
         Relationships: [
@@ -295,41 +260,44 @@ export type Database = {
       students: {
         Row: {
           address: string | null
-          admission_number: string
-          class_id: string
+          admission_number: string | null
+          badges: string[] | null
+          class_id: string | null
           created_at: string
           date_of_birth: string | null
           full_name: string
           id: string
-          parent_contact: string
           parent_email: string | null
-          parent_name: string
+          parent_name: string | null
+          parent_phone: string | null
           updated_at: string
         }
         Insert: {
           address?: string | null
-          admission_number: string
-          class_id: string
+          admission_number?: string | null
+          badges?: string[] | null
+          class_id?: string | null
           created_at?: string
           date_of_birth?: string | null
           full_name: string
           id?: string
-          parent_contact: string
           parent_email?: string | null
-          parent_name: string
+          parent_name?: string | null
+          parent_phone?: string | null
           updated_at?: string
         }
         Update: {
           address?: string | null
-          admission_number?: string
-          class_id?: string
+          admission_number?: string | null
+          badges?: string[] | null
+          class_id?: string | null
           created_at?: string
           date_of_birth?: string | null
           full_name?: string
           id?: string
-          parent_contact?: string
           parent_email?: string | null
-          parent_name?: string
+          parent_name?: string | null
+          parent_phone?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -344,21 +312,21 @@ export type Database = {
       }
       subjects: {
         Row: {
-          class_id: string
+          class_id: string | null
           code: string
           created_at: string
           id: string
           name: string
         }
         Insert: {
-          class_id: string
+          class_id?: string | null
           code: string
           created_at?: string
           id?: string
           name: string
         }
         Update: {
-          class_id?: string
+          class_id?: string | null
           code?: string
           created_at?: string
           id?: string
@@ -379,18 +347,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      has_role: {
-        Args: {
-          _role: Database["public"]["Enums"]["user_role"]
-          _user_id: string
-        }
-        Returns: boolean
-      }
+      [_ in never]: never
     }
     Enums: {
-      payment_status: "paid" | "pending" | "overdue"
-      term: "first" | "second" | "third"
-      user_role: "super_admin" | "staff"
+      [_ in never]: never
     }
     CompositeTypes: {
       [_ in never]: never
@@ -517,10 +477,6 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {
-      payment_status: ["paid", "pending", "overdue"],
-      term: ["first", "second", "third"],
-      user_role: ["super_admin", "staff"],
-    },
+    Enums: {},
   },
 } as const

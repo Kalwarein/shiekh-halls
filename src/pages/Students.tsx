@@ -30,7 +30,7 @@ interface Student {
   full_name: string;
   class_id: string;
   parent_name: string;
-  parent_contact: string;
+  parent_phone: string;
   date_of_birth: string;
   classes: {
     name: string;
@@ -213,7 +213,7 @@ export default function Students() {
                         <TableCell>{student.full_name}</TableCell>
                         <TableCell>{student.classes?.name}</TableCell>
                         <TableCell>{student.parent_name}</TableCell>
-                        <TableCell>{student.parent_contact}</TableCell>
+                        <TableCell>{student.parent_phone}</TableCell>
                         <TableCell>
                           <div className="flex space-x-2">
                             <Button variant="ghost" size="sm" onClick={(e) => {

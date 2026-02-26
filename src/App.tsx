@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import { AcademicYearProvider } from "@/hooks/useAcademicYear";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import Auth from "./pages/Auth";
@@ -23,29 +24,31 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <AuthProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/" element={
-              <ProtectedRoute>
-                <DashboardLayout />
-              </ProtectedRoute>
-            }>
-              <Route index element={<Dashboard />} />
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="students" element={<Students />} />
-              <Route path="student/:id" element={<StudentProfile />} />
-              <Route path="data-entry" element={<DataEntrySystem />} />
-              <Route path="report-cards" element={<ReportCards />} />
-              <Route path="finance" element={<Finance />} />
-              <Route path="attendance" element={<Attendance />} />
-              <Route path="settings" element={<Settings />} />
-            </Route>
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
+        <AcademicYearProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/" element={
+                <ProtectedRoute>
+                  <DashboardLayout />
+                </ProtectedRoute>
+              }>
+                <Route index element={<Dashboard />} />
+                <Route path="dashboard" element={<Dashboard />} />
+                <Route path="students" element={<Students />} />
+                <Route path="student/:id" element={<StudentProfile />} />
+                <Route path="data-entry" element={<DataEntrySystem />} />
+                <Route path="report-cards" element={<ReportCards />} />
+                <Route path="finance" element={<Finance />} />
+                <Route path="attendance" element={<Attendance />} />
+                <Route path="settings" element={<Settings />} />
+              </Route>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </AcademicYearProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

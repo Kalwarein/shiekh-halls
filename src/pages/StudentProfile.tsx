@@ -5,45 +5,53 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { formatCurrency } from '@/lib/currency';
+import { useAcademicYear } from '@/hooks/useAcademicYear';
 
 export default function StudentProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { selectedYearId } = useAcademicYear();
 
   const { data: student, isLoading: studentLoading } = useQuery({
     queryKey: ['student', id],
     queryFn: async () => {
       if (!id) throw new Error('Student ID is required');
-      const { data, error } = await supabase
-        .from('students')
-        .select(`*, classes (id, name)`)
-        .eq('id', id)
-        .single();
+      const { data, error } = await supabase.from('students').select('*, classes (id, name)').eq('id', id).single();
       if (error) throw error;
       return data;
     },
     enabled: !!id
   });
 
-  const { data: payments, isLoading: paymentsLoading } = useQuery({
-    queryKey: ['student-payments', id],
+  const { data: payments = [] } = useQuery({
+    queryKey: ['student-payments', id, selectedYearId],
     queryFn: async () => {
       if (!id) return [];
-      const { data, error } = await supabase
-        .from('fee_payments')
-        .select(`*, fee_structures (term, academic_year, amount, fee_type)`)
-        .eq('student_id', id)
-        .order('payment_date', { ascending: false });
+      let query = supabase.from('fee_payments').select('*').eq('student_id', id).order('payment_date', { ascending: false });
+      if (selectedYearId) query = query.eq('academic_year_id', selectedYearId);
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
     enabled: !!id
   });
 
-  const { data: attendanceSummary, isLoading: attendanceLoading } = useQuery({
+  const { data: feeStructure } = useQuery({
+    queryKey: ['student-fee-structure', student?.class_id, selectedYearId],
+    queryFn: async () => {
+      if (!student?.class_id || !selectedYearId) return null;
+      const { data, error } = await supabase.from('fee_structures').select('*').eq('class_id', student.class_id).eq('academic_year_id', selectedYearId).eq('is_active', true).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!student?.class_id && !!selectedYearId
+  });
+
+  const { data: attendanceSummary } = useQuery({
     queryKey: ['student-attendance', id],
     queryFn: async () => {
       if (!id) return { total: 0, present: 0, absent: 0 };
@@ -56,16 +64,13 @@ export default function StudentProfile() {
     enabled: !!id
   });
 
-  const { data: grades, isLoading: gradesLoading } = useQuery({
-    queryKey: ['student-grades', id],
+  const { data: grades = [] } = useQuery({
+    queryKey: ['student-grades', id, selectedYearId],
     queryFn: async () => {
       if (!id) return [];
-      const { data, error } = await supabase
-        .from('report_cards')
-        .select(`*, subjects (name, code)`)
-        .eq('student_id', id)
-        .order('created_at', { ascending: false })
-        .limit(10);
+      let query = supabase.from('report_cards').select('*, subjects (name, code)').eq('student_id', id).order('term');
+      if (selectedYearId) query = query.eq('academic_year_id', selectedYearId);
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
@@ -75,10 +80,10 @@ export default function StudentProfile() {
   if (studentLoading) {
     return (
       <div className="space-y-6">
-        <div className="h-12 bg-muted animate-pulse rounded-lg"></div>
+        <div className="h-12 bg-muted animate-pulse rounded-lg" />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-1"><div className="h-96 bg-muted animate-pulse rounded-lg"></div></div>
-          <div className="lg:col-span-2 space-y-6"><div className="h-64 bg-muted animate-pulse rounded-lg"></div></div>
+          <div className="lg:col-span-1"><div className="h-96 bg-muted animate-pulse rounded-lg" /></div>
+          <div className="lg:col-span-2"><div className="h-64 bg-muted animate-pulse rounded-lg" /></div>
         </div>
       </div>
     );
@@ -95,23 +100,36 @@ export default function StudentProfile() {
     );
   }
 
-  const totalPaid = payments?.reduce((sum, payment) => sum + Number(payment.amount_paid), 0) || 0;
+  const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
+  const totalFee = feeStructure ? Number(feeStructure.total_fee || feeStructure.amount || 0) : 0;
+  const balance = totalFee - totalPaid;
   const attendancePercentage = attendanceSummary?.total ? Math.round((attendanceSummary.present / attendanceSummary.total) * 100) : 0;
+  const totalScore = grades.reduce((sum, g) => sum + Number(g.score || 0), 0);
+  const avgScore = grades.length > 0 ? Math.round(totalScore / grades.length) : 0;
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'active': return <Badge className="bg-green-100 text-green-800 border-0">Active</Badge>;
+      case 'transferred': return <Badge className="bg-yellow-100 text-yellow-800 border-0">Transferred</Badge>;
+      case 'graduated': return <Badge className="bg-blue-100 text-blue-800 border-0">Graduated</Badge>;
+      default: return <Badge className="bg-green-100 text-green-800 border-0">Active</Badge>;
+    }
+  };
 
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-4">
-        <Button variant="outline" size="sm" onClick={() => navigate('/students')}>
-          <ArrowLeft className="w-4 h-4 mr-2" />Back to Students
-        </Button>
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">{student.full_name}</h1>
+        <Button variant="outline" size="sm" onClick={() => navigate('/students')}><ArrowLeft className="w-4 h-4 mr-2" />Back</Button>
+        <div className="flex-1">
+          <h1 className="text-2xl lg:text-3xl font-bold text-foreground">{student.full_name}</h1>
           <p className="text-muted-foreground">{student.admission_number} • {(student.classes as any)?.name}</p>
         </div>
+        {getStatusBadge(student.status || 'active')}
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="lg:col-span-1">
+        {/* Left - Student Info */}
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="lg:col-span-1 space-y-4">
           <Card className="card-premium">
             <CardHeader><CardTitle className="flex items-center gap-2"><User className="w-5 h-5" />Student Information</CardTitle></CardHeader>
             <CardContent className="space-y-4">
@@ -122,55 +140,105 @@ export default function StudentProfile() {
                 <h3 className="font-semibold text-lg">{student.full_name}</h3>
                 <p className="text-muted-foreground">{student.admission_number}</p>
               </div>
-              <div className="space-y-3">
-                {student.date_of_birth && (<div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-muted-foreground" /><span className="text-sm">{new Date(student.date_of_birth).toLocaleDateString()}</span></div>)}
-                <div className="flex items-center gap-2"><GraduationCap className="w-4 h-4 text-muted-foreground" /><span className="text-sm">{(student.classes as any)?.name}</span></div>
-                <div className="flex items-center gap-2"><Phone className="w-4 h-4 text-muted-foreground" /><span className="text-sm">{student.parent_phone}</span></div>
-                {student.parent_email && (<div className="flex items-center gap-2"><Mail className="w-4 h-4 text-muted-foreground" /><span className="text-sm">{student.parent_email}</span></div>)}
-                {student.address && (<div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-muted-foreground" /><span className="text-sm">{student.address}</span></div>)}
+              <div className="space-y-3 text-sm">
+                {student.gender && <div className="flex items-center gap-2"><User className="w-4 h-4 text-muted-foreground" /><span className="capitalize">{student.gender}</span></div>}
+                {student.date_of_birth && <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-muted-foreground" /><span>{new Date(student.date_of_birth).toLocaleDateString()}</span></div>}
+                <div className="flex items-center gap-2"><GraduationCap className="w-4 h-4 text-muted-foreground" /><span>{(student.classes as any)?.name}</span></div>
+                {student.parent_phone && <div className="flex items-center gap-2"><Phone className="w-4 h-4 text-muted-foreground" /><span>{student.parent_phone}</span></div>}
+                {student.parent_email && <div className="flex items-center gap-2"><Mail className="w-4 h-4 text-muted-foreground" /><span>{student.parent_email}</span></div>}
+                {student.address && <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-muted-foreground" /><span>{student.address}</span></div>}
               </div>
-              <div className="pt-4 border-t">
-                <p className="text-sm font-medium mb-2">Parent/Guardian</p>
-                <p className="text-sm text-muted-foreground">{student.parent_name}</p>
+              {student.parent_name && (
+                <div className="pt-4 border-t">
+                  <p className="text-sm font-medium mb-1">Parent/Guardian</p>
+                  <p className="text-sm text-muted-foreground">{student.parent_name}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Quick Stats */}
+          <Card className="card-premium">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Avg. Score</span>
+                <span className="font-bold text-lg">{avgScore}%</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Attendance</span>
+                <span className="font-bold text-lg">{attendancePercentage}%</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Balance</span>
+                <span className={`font-bold text-lg ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>{formatCurrency(balance)}</span>
               </div>
             </CardContent>
           </Card>
         </motion.div>
 
+        {/* Right - Tabs */}
         <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="lg:col-span-2">
-          <Tabs defaultValue="overview" className="space-y-4">
+          <Tabs defaultValue="results" className="space-y-4">
             <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="results">Results</TabsTrigger>
               <TabsTrigger value="finance">Finance</TabsTrigger>
               <TabsTrigger value="attendance">Attendance</TabsTrigger>
-              <TabsTrigger value="grades">Grades</TabsTrigger>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="overview" className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card><CardContent className="p-4"><div className="flex items-center gap-2"><DollarSign className="w-5 h-5 text-green-600" /><div><p className="text-sm text-muted-foreground">Total Paid</p><p className="text-xl font-bold">{formatCurrency(totalPaid)}</p></div></div></CardContent></Card>
-                <Card><CardContent className="p-4"><div className="flex items-center gap-2"><Calendar className="w-5 h-5 text-blue-600" /><div><p className="text-sm text-muted-foreground">Attendance</p><p className="text-xl font-bold">{attendancePercentage}%</p></div></div></CardContent></Card>
-                <Card><CardContent className="p-4"><div className="flex items-center gap-2"><FileText className="w-5 h-5 text-purple-600" /><div><p className="text-sm text-muted-foreground">Total Grades</p><p className="text-xl font-bold">{grades?.length || 0}</p></div></div></CardContent></Card>
-              </div>
+            <TabsContent value="results">
+              <Card className="card-premium">
+                <CardHeader><CardTitle>Academic Results</CardTitle></CardHeader>
+                <CardContent>
+                  {grades.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-8">No results recorded</p>
+                  ) : (
+                    <div className="space-y-4">
+                      <Table>
+                        <TableHeader><TableRow><TableHead>Subject</TableHead><TableHead>Term</TableHead><TableHead>Score</TableHead></TableRow></TableHeader>
+                        <TableBody>
+                          {grades.map(g => (
+                            <TableRow key={g.id}>
+                              <TableCell className="font-medium">{(g.subjects as any)?.name}</TableCell>
+                              <TableCell className="capitalize">{g.term} Term</TableCell>
+                              <TableCell className="font-bold">{g.score}%</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      <div className="p-4 bg-muted/30 rounded-lg grid grid-cols-3 gap-4 text-center">
+                        <div><p className="text-sm text-muted-foreground">Subjects</p><p className="text-xl font-bold">{grades.length}</p></div>
+                        <div><p className="text-sm text-muted-foreground">Total</p><p className="text-xl font-bold">{totalScore}</p></div>
+                        <div><p className="text-sm text-muted-foreground">Average</p><p className="text-xl font-bold">{avgScore}%</p></div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
 
-            <TabsContent value="finance" className="space-y-4">
+            <TabsContent value="finance">
               <Card className="card-premium">
-                <CardHeader><CardTitle>Payment History</CardTitle><CardDescription>All recorded payments</CardDescription></CardHeader>
+                <CardHeader><CardTitle>Payment History</CardTitle></CardHeader>
                 <CardContent>
-                  {paymentsLoading ? (
-                    <div className="space-y-3">{[...Array(3)].map((_, i) => (<div key={i} className="h-16 bg-muted animate-pulse rounded-lg"></div>))}</div>
-                  ) : payments?.length === 0 ? (
+                  {totalFee > 0 && (
+                    <div className="grid grid-cols-3 gap-4 mb-4">
+                      <div className="p-3 bg-muted/30 rounded-lg text-center"><p className="text-xs text-muted-foreground">Total Fee</p><p className="font-bold">{formatCurrency(totalFee)}</p></div>
+                      <div className="p-3 bg-muted/30 rounded-lg text-center"><p className="text-xs text-muted-foreground">Paid</p><p className="font-bold text-green-600">{formatCurrency(totalPaid)}</p></div>
+                      <div className="p-3 bg-muted/30 rounded-lg text-center"><p className="text-xs text-muted-foreground">Balance</p><p className={`font-bold ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>{formatCurrency(balance)}</p></div>
+                    </div>
+                  )}
+                  {payments.length === 0 ? (
                     <p className="text-muted-foreground text-center py-8">No payments recorded</p>
                   ) : (
                     <div className="space-y-3">
-                      {payments?.map((payment) => (
-                        <div key={payment.id} className="flex justify-between items-center p-3 border rounded-lg">
+                      {payments.map(p => (
+                        <div key={p.id} className="flex justify-between items-center p-3 border rounded-lg">
                           <div>
-                            <p className="font-medium">{formatCurrency(Number(payment.amount_paid))}</p>
-                            <p className="text-sm text-muted-foreground">{new Date(payment.payment_date).toLocaleDateString()} • {payment.payment_method}</p>
+                            <p className="font-medium">{formatCurrency(Number(p.amount_paid))}</p>
+                            <p className="text-sm text-muted-foreground">{new Date(p.payment_date).toLocaleDateString()} • {p.payment_method}</p>
                           </div>
-                          <Badge variant={payment.status === 'paid' ? 'default' : 'secondary'}>{payment.status}</Badge>
+                          <Badge variant={p.status === 'paid' ? 'default' : 'secondary'}>{p.status}</Badge>
                         </div>
                       ))}
                     </div>
@@ -179,46 +247,25 @@ export default function StudentProfile() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="attendance" className="space-y-4">
+            <TabsContent value="attendance">
               <Card className="card-premium">
                 <CardHeader><CardTitle>Attendance Summary</CardTitle></CardHeader>
                 <CardContent>
-                  {attendanceLoading ? (<div className="h-32 bg-muted animate-pulse rounded-lg"></div>) : (
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                      <div><p className="text-2xl font-bold text-green-600">{attendanceSummary?.present}</p><p className="text-sm text-muted-foreground">Present</p></div>
-                      <div><p className="text-2xl font-bold text-red-600">{attendanceSummary?.absent}</p><p className="text-sm text-muted-foreground">Absent</p></div>
-                      <div><p className="text-2xl font-bold text-blue-600">{attendancePercentage}%</p><p className="text-sm text-muted-foreground">Percentage</p></div>
-                    </div>
-                  )}
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div><p className="text-2xl font-bold text-green-600">{attendanceSummary?.present || 0}</p><p className="text-sm text-muted-foreground">Present</p></div>
+                    <div><p className="text-2xl font-bold text-red-600">{attendanceSummary?.absent || 0}</p><p className="text-sm text-muted-foreground">Absent</p></div>
+                    <div><p className="text-2xl font-bold text-blue-600">{attendancePercentage}%</p><p className="text-sm text-muted-foreground">Rate</p></div>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
 
-            <TabsContent value="grades" className="space-y-4">
-              <Card className="card-premium">
-                <CardHeader><CardTitle>Recent Grades</CardTitle></CardHeader>
-                <CardContent>
-                  {gradesLoading ? (
-                    <div className="space-y-3">{[...Array(3)].map((_, i) => (<div key={i} className="h-16 bg-muted animate-pulse rounded-lg"></div>))}</div>
-                  ) : grades?.length === 0 ? (
-                    <p className="text-muted-foreground text-center py-8">No grades recorded</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {grades?.map((grade) => (
-                        <div key={grade.id} className="flex justify-between items-center p-3 border rounded-lg">
-                          <div>
-                            <p className="font-medium">{(grade.subjects as any)?.name}</p>
-                            <p className="text-sm text-muted-foreground">{grade.term} Term, {grade.academic_year}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xl font-bold">{grade.score}%</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+            <TabsContent value="overview">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card><CardContent className="p-4"><div className="flex items-center gap-2"><DollarSign className="w-5 h-5 text-green-600" /><div><p className="text-sm text-muted-foreground">Total Paid</p><p className="text-xl font-bold">{formatCurrency(totalPaid)}</p></div></div></CardContent></Card>
+                <Card><CardContent className="p-4"><div className="flex items-center gap-2"><Calendar className="w-5 h-5 text-blue-600" /><div><p className="text-sm text-muted-foreground">Attendance</p><p className="text-xl font-bold">{attendancePercentage}%</p></div></div></CardContent></Card>
+                <Card><CardContent className="p-4"><div className="flex items-center gap-2"><FileText className="w-5 h-5 text-purple-600" /><div><p className="text-sm text-muted-foreground">Avg Score</p><p className="text-xl font-bold">{avgScore}%</p></div></div></CardContent></Card>
+              </div>
             </TabsContent>
           </Tabs>
         </motion.div>

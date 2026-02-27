@@ -212,32 +212,57 @@ export type Database = {
       fee_structures: {
         Row: {
           academic_year: string | null
+          academic_year_id: string | null
           amount: number
           class_id: string | null
           created_at: string
+          exam_fee: number
           fee_type: string
           id: string
+          is_active: boolean
+          other_fee: number
           term: string | null
+          total_fee: number
+          tuition_fee: number
         }
         Insert: {
           academic_year?: string | null
+          academic_year_id?: string | null
           amount?: number
           class_id?: string | null
           created_at?: string
+          exam_fee?: number
           fee_type: string
           id?: string
+          is_active?: boolean
+          other_fee?: number
           term?: string | null
+          total_fee?: number
+          tuition_fee?: number
         }
         Update: {
           academic_year?: string | null
+          academic_year_id?: string | null
           amount?: number
           class_id?: string | null
           created_at?: string
+          exam_fee?: number
           fee_type?: string
           id?: string
+          is_active?: boolean
+          other_fee?: number
           term?: string | null
+          total_fee?: number
+          tuition_fee?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "fee_structures_academic_year_id_fkey"
+            columns: ["academic_year_id"]
+            isOneToOne: false
+            referencedRelation: "academic_years"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fee_structures_class_id_fkey"
             columns: ["class_id"]
@@ -321,10 +346,12 @@ export type Database = {
           created_at: string
           date_of_birth: string | null
           full_name: string
+          gender: string | null
           id: string
           parent_email: string | null
           parent_name: string | null
           parent_phone: string | null
+          status: string
           updated_at: string
         }
         Insert: {
@@ -336,10 +363,12 @@ export type Database = {
           created_at?: string
           date_of_birth?: string | null
           full_name: string
+          gender?: string | null
           id?: string
           parent_email?: string | null
           parent_name?: string | null
           parent_phone?: string | null
+          status?: string
           updated_at?: string
         }
         Update: {
@@ -351,10 +380,12 @@ export type Database = {
           created_at?: string
           date_of_birth?: string | null
           full_name?: string
+          gender?: string | null
           id?: string
           parent_email?: string | null
           parent_name?: string | null
           parent_phone?: string | null
+          status?: string
           updated_at?: string
         }
         Relationships: [

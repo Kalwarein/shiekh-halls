@@ -1,46 +1,24 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Download, Search, DollarSign, CreditCard, AlertTriangle, User } from 'lucide-react';
+import { Plus, Download, Search, DollarSign, CreditCard, AlertTriangle, User, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { FinanceEntry } from '@/components/forms/FinanceEntry';
+import { FeeStructureManager } from '@/components/finance/FeeStructureManager';
 import { useToast } from '@/hooks/use-toast';
 import { useAcademicYear } from '@/hooks/useAcademicYear';
 import { formatCurrency } from '@/lib/currency';
 
-interface Student {
-  id: string;
-  full_name: string;
-  admission_number: string;
-  class_id: string;
-  classes?: { name: string };
-}
-
-interface FeePayment {
-  id: string;
-  student_id: string;
-  amount_paid: number;
-  payment_date: string;
-  payment_method: string;
-  receipt_number: string;
-  status: string;
-  notes?: string;
-  students?: Student;
-  fee_structures?: { amount: number; term: string; academic_year: string };
-}
-
 export default function Finance() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClass, setSelectedClass] = useState('all');
-  const [selectedStatus, setSelectedStatus] = useState('all');
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showFinanceEntry, setShowFinanceEntry] = useState(false);
   const { toast } = useToast();
   const { selectedYearId } = useAcademicYear();
@@ -57,43 +35,43 @@ export default function Finance() {
   const { data: payments = [], isLoading: paymentsLoading, refetch } = useQuery({
     queryKey: ['fee-payments', selectedYearId],
     queryFn: async () => {
-      let query = supabase.from('fee_payments').select(`*, students (id, full_name, admission_number, class_id, classes (name)), fee_structures (amount, term, academic_year)`).order('payment_date', { ascending: false });
+      let query = supabase.from('fee_payments').select(`*, students (id, full_name, admission_number, class_id, classes (name)), fee_structures (amount, total_fee, tuition_fee, exam_fee, other_fee)`).order('payment_date', { ascending: false });
       if (selectedYearId) query = query.eq('academic_year_id', selectedYearId);
       const { data, error } = await query;
       if (error) throw error;
-      return data as FeePayment[];
+      return data || [];
+    }
+  });
+
+  // Get fee structures for balance calculation
+  const { data: feeStructures = [] } = useQuery({
+    queryKey: ['fee-structures-all', selectedYearId],
+    queryFn: async () => {
+      let query = supabase.from('fee_structures').select('*, classes (name)').eq('is_active', true);
+      if (selectedYearId) query = query.eq('academic_year_id', selectedYearId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
     }
   });
 
   const filteredPayments = payments.filter(payment => {
-    const studentName = payment.students?.full_name || '';
-    const studentAdmission = payment.students?.admission_number || '';
-    const className = payment.students?.classes?.name || '';
+    const studentName = (payment.students as any)?.full_name || '';
+    const studentAdmission = (payment.students as any)?.admission_number || '';
+    const className = (payment.students as any)?.classes?.name || '';
     const matchesSearch = studentName.toLowerCase().includes(searchQuery.toLowerCase()) || studentAdmission.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesClass = selectedClass === 'all' || className === selectedClass;
-    const matchesStatus = selectedStatus === 'all' || payment.status === selectedStatus;
-    return matchesSearch && matchesClass && matchesStatus;
+    return matchesSearch && matchesClass;
   });
 
-  const totalFees = payments.reduce((sum, payment) => sum + (payment.fee_structures?.amount || 0), 0);
-  const amountPaid = payments.reduce((sum, payment) => sum + payment.amount_paid, 0);
-  const outstanding = totalFees - amountPaid;
+  const amountPaid = payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
+  const totalExpected = feeStructures.reduce((sum, fs) => sum + Number(fs.total_fee || fs.amount || 0), 0);
+  const outstanding = totalExpected > amountPaid ? totalExpected - amountPaid : 0;
 
   const summaryData = [
-    { title: 'Total Fees', value: formatCurrency(totalFees), icon: DollarSign, color: 'text-primary' },
-    { title: 'Amount Paid', value: formatCurrency(amountPaid), icon: CreditCard, color: 'text-green-600' },
+    { title: 'Total Expected', value: formatCurrency(totalExpected), icon: DollarSign, color: 'text-primary' },
+    { title: 'Amount Collected', value: formatCurrency(amountPaid), icon: CreditCard, color: 'text-green-600' },
     { title: 'Outstanding', value: formatCurrency(outstanding), icon: AlertTriangle, color: 'text-red-600' },
-  ];
-
-  const statusCounts = payments.reduce((acc, payment) => {
-    acc[payment.status] = (acc[payment.status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-  const total = payments.length || 1;
-  const statusData = [
-    { name: 'Paid', value: Math.round(((statusCounts.paid || 0) / total) * 100), color: '#10B981' },
-    { name: 'Pending', value: Math.round(((statusCounts.pending || 0) / total) * 100), color: '#F59E0B' },
-    { name: 'Overdue', value: Math.round(((statusCounts.overdue || 0) / total) * 100), color: '#EF4444' },
   ];
 
   const getStatusColor = (status: string) => {
@@ -105,60 +83,6 @@ export default function Finance() {
     }
   };
 
-  if (selectedStudent) {
-    return (
-      <div className="space-y-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-          <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={() => setSelectedStudent(null)} className="shrink-0">← Back</Button>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-foreground">{selectedStudent.full_name}</h1>
-              <p className="text-muted-foreground">{selectedStudent.admission_number} • {selectedStudent.classes?.name}</p>
-            </div>
-          </div>
-          <Button onClick={() => setShowFinanceEntry(true)} className="btn-gold shrink-0"><Plus className="w-4 h-4 mr-2" />Record Payment</Button>
-        </motion.div>
-
-        {showFinanceEntry && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <FinanceEntry onSuccess={() => { setShowFinanceEntry(false); refetch(); toast({ title: "Success", description: "Payment recorded successfully" }); }} />
-          </motion.div>
-        )}
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <Card className="card-premium">
-            <CardHeader>
-              <CardTitle>Payment History</CardTitle>
-              <CardDescription>All payments for {selectedStudent.full_name}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {paymentsLoading ? (
-                <div className="space-y-4">{[...Array(3)].map((_, i) => (<div key={i} className="flex justify-between items-center"><div className="space-y-2"><Skeleton className="h-4 w-32" /><Skeleton className="h-3 w-24" /></div><Skeleton className="h-6 w-20" /></div>))}</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead><TableHead>Receipt</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {filteredPayments.filter(p => p.student_id === selectedStudent.id).map((payment) => (
-                        <TableRow key={payment.id}>
-                          <TableCell>{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
-                          <TableCell className="font-medium">{formatCurrency(payment.amount_paid)}</TableCell>
-                          <TableCell>{payment.payment_method}</TableCell>
-                          <TableCell>{payment.receipt_number || '-'}</TableCell>
-                          <TableCell><span className={`px-2 py-1 rounded-md text-sm font-medium capitalize ${getStatusColor(payment.status)}`}>{payment.status}</span></TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
@@ -167,14 +91,14 @@ export default function Finance() {
           <p className="text-muted-foreground">Track fees, payments, and financial records</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
-          <Button variant="outline" className="w-full sm:w-auto"><Download className="w-4 h-4 mr-2" />Export Report</Button>
+          <Button variant="outline" className="w-full sm:w-auto"><Download className="w-4 h-4 mr-2" />Export</Button>
           <Button onClick={() => setShowFinanceEntry(true)} className="btn-gold w-full sm:w-auto"><Plus className="w-4 h-4 mr-2" />Record Payment</Button>
         </div>
       </motion.div>
 
       {showFinanceEntry && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <FinanceEntry onSuccess={() => { setShowFinanceEntry(false); refetch(); toast({ title: "Success", description: "Payment recorded successfully" }); }} />
+          <FinanceEntry onSuccess={() => { setShowFinanceEntry(false); refetch(); }} />
         </motion.div>
       )}
 
@@ -193,30 +117,15 @@ export default function Finance() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>
-          <Card className="card-premium">
-            <CardHeader><CardTitle>Payment Status</CardTitle><CardDescription>Distribution of payment statuses</CardDescription></CardHeader>
-            <CardContent>
-              {paymentsLoading ? <Skeleton className="h-[200px] w-full" /> : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart><Pie data={statusData} cx="50%" cy="50%" innerRadius={40} outerRadius={80} paddingAngle={5} dataKey="value">{statusData.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.color} />))}</Pie><Tooltip formatter={(value) => `${value}%`} /></PieChart>
-                </ResponsiveContainer>
-              )}
-              <div className="space-y-2 mt-4">
-                {statusData.map((entry, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }}></div><span className="text-sm">{entry.name}</span></div>
-                    <span className="text-sm font-medium">{entry.value}%</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+      <Tabs defaultValue="payments" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="payments"><CreditCard className="w-4 h-4 mr-2" />Payments</TabsTrigger>
+          <TabsTrigger value="fee-structures"><Settings2 className="w-4 h-4 mr-2" />Fee Structures</TabsTrigger>
+        </TabsList>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="lg:col-span-2 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <TabsContent value="payments" className="space-y-4">
+          {/* Filters */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
               <Input placeholder="Search students..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
@@ -225,77 +134,65 @@ export default function Finance() {
               <SelectTrigger><SelectValue placeholder="Filter by class" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Classes</SelectItem>
-                {classes.map((cls) => (<SelectItem key={cls.id} value={cls.name}>{cls.name}</SelectItem>))}
-              </SelectContent>
-            </Select>
-            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-              <SelectTrigger><SelectValue placeholder="Filter by status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="overdue">Overdue</SelectItem>
+                {classes.map(cls => <SelectItem key={cls.id} value={cls.name}>{cls.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
-        </motion.div>
-      </div>
 
-      {/* Payments Table */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <Card className="card-premium">
-          <CardHeader><CardTitle>Fee Payments</CardTitle><CardDescription>{filteredPayments.length} payment records found</CardDescription></CardHeader>
-          <CardContent>
-            {paymentsLoading ? (
-              <div className="space-y-4">{[...Array(5)].map((_, i) => (<div key={i} className="flex items-center justify-between p-4"><div className="flex items-center gap-4"><Skeleton className="h-10 w-10 rounded-full" /><div className="space-y-2"><Skeleton className="h-4 w-32" /><Skeleton className="h-3 w-24" /></div></div><div className="flex gap-4"><Skeleton className="h-4 w-20" /><Skeleton className="h-4 w-16" /></div></div>))}</div>
-            ) : filteredPayments.length === 0 ? (
-              <div className="text-center py-8"><p className="text-muted-foreground">No payment records found</p></div>
-            ) : (
-              <div className="space-y-4">
-                {/* Mobile view */}
-                <div className="block lg:hidden space-y-4">
-                  {filteredPayments.map((payment, index) => (
-                    <motion.div key={payment.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }} className="p-4 border rounded-lg space-y-3 hover:bg-muted/50 cursor-pointer" onClick={() => setSelectedStudent(payment.students!)}>
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center"><User className="w-5 h-5 text-primary" /></div>
-                          <div><p className="font-medium">{payment.students?.full_name}</p><p className="text-sm text-muted-foreground">{payment.students?.admission_number}</p></div>
-                        </div>
-                        <span className={`px-2 py-1 rounded-md text-sm font-medium capitalize ${getStatusColor(payment.status)}`}>{payment.status}</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div><p className="text-muted-foreground">Amount Paid</p><p className="font-medium">{formatCurrency(payment.amount_paid)}</p></div>
-                        <div><p className="text-muted-foreground">Date</p><p>{new Date(payment.payment_date).toLocaleDateString()}</p></div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-                {/* Desktop view */}
-                <div className="hidden lg:block overflow-x-auto">
+          {/* Payments Table */}
+          <Card className="card-premium">
+            <CardHeader>
+              <CardTitle>Payment Records</CardTitle>
+              <CardDescription>{filteredPayments.length} records found</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {paymentsLoading ? (
+                <div className="space-y-4">{[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />)}</div>
+              ) : filteredPayments.length === 0 ? (
+                <div className="text-center py-8"><p className="text-muted-foreground">No payment records found</p></div>
+              ) : (
+                <div className="overflow-x-auto">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Student</TableHead><TableHead>Class</TableHead><TableHead>Fee Amount</TableHead><TableHead>Amount Paid</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead><TableHead>Payment Date</TableHead><TableHead>Method</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Student</TableHead>
+                        <TableHead>Class</TableHead>
+                        <TableHead>Amount Paid</TableHead>
+                        <TableHead>Method</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Receipt</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
                     <TableBody>
-                      {filteredPayments.map((payment, index) => (
-                        <motion.tr key={payment.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }} className="hover:bg-muted/50">
-                          <TableCell><div><p className="font-medium">{payment.students?.full_name}</p><p className="text-sm text-muted-foreground">{payment.students?.admission_number}</p></div></TableCell>
-                          <TableCell><span className="px-2 py-1 bg-primary/10 text-primary rounded-md text-sm">{payment.students?.classes?.name}</span></TableCell>
-                          <TableCell className="font-medium">{formatCurrency(payment.fee_structures?.amount || 0)}</TableCell>
-                          <TableCell className="font-medium">{formatCurrency(payment.amount_paid)}</TableCell>
-                          <TableCell className="font-medium">{formatCurrency((payment.fee_structures?.amount || 0) - payment.amount_paid)}</TableCell>
-                          <TableCell><span className={`px-2 py-1 rounded-md text-sm font-medium capitalize ${getStatusColor(payment.status)}`}>{payment.status}</span></TableCell>
-                          <TableCell>{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
+                      {filteredPayments.map((payment) => (
+                        <TableRow key={payment.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{(payment.students as any)?.full_name}</p>
+                              <p className="text-sm text-muted-foreground">{(payment.students as any)?.admission_number}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell><span className="px-2 py-1 bg-primary/10 text-primary rounded-md text-sm">{(payment.students as any)?.classes?.name}</span></TableCell>
+                          <TableCell className="font-medium">{formatCurrency(Number(payment.amount_paid))}</TableCell>
                           <TableCell>{payment.payment_method || '-'}</TableCell>
-                          <TableCell><Button variant="ghost" size="sm" onClick={() => setSelectedStudent(payment.students!)}>View Details</Button></TableCell>
-                        </motion.tr>
+                          <TableCell>{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
+                          <TableCell>{payment.receipt_number || '-'}</TableCell>
+                          <TableCell><span className={`px-2 py-1 rounded-md text-sm font-medium capitalize ${getStatusColor(payment.status || 'pending')}`}>{payment.status}</span></TableCell>
+                        </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </motion.div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="fee-structures">
+          <FeeStructureManager />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

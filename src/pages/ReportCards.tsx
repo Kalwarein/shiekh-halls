@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Download, Search, User, BookOpen, Award } from 'lucide-react';
+import { Plus, Download, Search, User, BookOpen, Award, Trophy, BarChart3, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
@@ -20,41 +22,20 @@ interface Student {
   classes?: { name: string };
 }
 
-interface Subject {
-  id: string;
-  name: string;
-  code: string;
-  class_id: string;
-}
-
-interface ReportCard {
-  id: string;
-  student_id: string;
-  subject_id: string;
-  term: string;
-  academic_year: string;
-  score: number;
-  grade: string;
-  remarks?: string;
-  subjects?: { name: string; code: string };
-}
-
 const terms = ['first', 'second', 'third'];
 
 export default function ReportCards() {
-  const [selectedClass, setSelectedClass] = useState('all');
+  const [selectedClass, setSelectedClass] = useState('');
   const [selectedTerm, setSelectedTerm] = useState('first');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showGradeEntry, setShowGradeEntry] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('class-leaderboard');
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { selectedYearId, academicYears } = useAcademicYear();
-
   const selectedYearName = academicYears.find(y => y.id === selectedYearId)?.name || '';
 
-  // Fetch classes
   const { data: classes = [] } = useQuery({
     queryKey: ['classes'],
     queryFn: async () => {
@@ -64,82 +45,73 @@ export default function ReportCards() {
     }
   });
 
-  // Fetch students - filtered by class selection
-  const { data: students = [], isLoading: studentsLoading } = useQuery({
-    queryKey: ['students-with-classes', selectedClass],
+  // All report cards for selected term & year
+  const { data: allReportCards = [], isLoading: reportCardsLoading } = useQuery({
+    queryKey: ['all-report-cards', selectedTerm, selectedYearName],
     queryFn: async () => {
-      let query = supabase.from('students').select(`id, full_name, admission_number, class_id, classes (name)`).order('full_name');
-      if (selectedClass !== 'all') {
-        const cls = classes.find(c => c.name === selectedClass);
-        if (cls) query = query.eq('class_id', cls.id);
-      }
-      const { data, error } = await query;
+      if (!selectedYearName) return [];
+      const { data, error } = await supabase
+        .from('report_cards')
+        .select('*, subjects (name, code), students (id, full_name, admission_number, class_id, classes (name))')
+        .eq('term', selectedTerm)
+        .eq('academic_year', selectedYearName);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!selectedYearName
+  });
+
+  // Students for selected class
+  const { data: classStudents = [] } = useQuery({
+    queryKey: ['class-students', selectedClass],
+    queryFn: async () => {
+      if (!selectedClass) return [];
+      const { data, error } = await supabase.from('students').select('id, full_name, admission_number, class_id, classes (name)').eq('class_id', selectedClass).order('full_name');
       if (error) throw error;
       return data as Student[];
     },
-    enabled: classes.length > 0
+    enabled: !!selectedClass
   });
 
-  // Fetch subjects for selected student's class
+  // Subjects for selected class
   const { data: subjects = [] } = useQuery({
-    queryKey: ['subjects', selectedStudent?.class_id],
+    queryKey: ['subjects', selectedStudent?.class_id || selectedClass],
     queryFn: async () => {
-      if (!selectedStudent?.class_id) return [];
-      const { data, error } = await supabase.from('subjects').select('*').eq('class_id', selectedStudent.class_id).eq('is_active', true).order('name');
+      const classId = selectedStudent?.class_id || selectedClass;
+      if (!classId) return [];
+      const { data, error } = await supabase.from('subjects').select('*').eq('class_id', classId).eq('is_active', true).order('name');
       if (error) throw error;
-      return data as Subject[];
+      return data;
     },
-    enabled: !!selectedStudent?.class_id
+    enabled: !!(selectedStudent?.class_id || selectedClass)
   });
 
-  // Fetch report cards for selected student
-  const { data: reportCards = [], isLoading: reportCardsLoading } = useQuery({
-    queryKey: ['report-cards', selectedStudent?.id, selectedTerm, selectedYearName],
+  // Student-specific report cards
+  const { data: studentReportCards = [] } = useQuery({
+    queryKey: ['student-report-cards', selectedStudent?.id, selectedTerm, selectedYearName],
     queryFn: async () => {
       if (!selectedStudent?.id || !selectedYearName) return [];
       const { data, error } = await supabase
         .from('report_cards')
-        .select(`*, subjects (name, code)`)
+        .select('*, subjects (name, code)')
         .eq('student_id', selectedStudent.id)
         .eq('term', selectedTerm)
         .eq('academic_year', selectedYearName);
       if (error) throw error;
-      return data as ReportCard[];
+      return data || [];
     },
     enabled: !!selectedStudent?.id && !!selectedYearName
   });
 
-  // Grade mutation - numeric only, no letter grades
+  // Grade mutation
   const gradeMutation = useMutation({
-    mutationFn: async (gradeData: {
-      student_id: string;
-      subject_id: string;
-      term: string;
-      academic_year: string;
-      score: number;
-      remarks?: string;
-      academic_year_id?: string;
-    }) => {
+    mutationFn: async (gradeData: { student_id: string; subject_id: string; term: string; academic_year: string; score: number; remarks?: string; academic_year_id?: string }) => {
       const { data: existing } = await supabase
-        .from('report_cards')
-        .select('id')
-        .eq('student_id', gradeData.student_id)
-        .eq('subject_id', gradeData.subject_id)
-        .eq('term', gradeData.term)
-        .eq('academic_year', gradeData.academic_year)
-        .single();
+        .from('report_cards').select('id')
+        .eq('student_id', gradeData.student_id).eq('subject_id', gradeData.subject_id)
+        .eq('term', gradeData.term).eq('academic_year', gradeData.academic_year).single();
 
-      const payload = {
-        student_id: gradeData.student_id,
-        subject_id: gradeData.subject_id,
-        term: gradeData.term,
-        academic_year: gradeData.academic_year,
-        score: gradeData.score,
-        grade: null, // No letter grades
-        remarks: gradeData.remarks || null,
-        academic_year_id: gradeData.academic_year_id || null,
-      };
-
+      const payload = { ...gradeData, grade: null, remarks: gradeData.remarks || null, academic_year_id: gradeData.academic_year_id || null };
       if (existing) {
         const { error } = await supabase.from('report_cards').update(payload).eq('id', existing.id);
         if (error) throw error;
@@ -149,122 +121,145 @@ export default function ReportCards() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['report-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['student-report-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['all-report-cards'] });
       toast({ title: 'Success', description: 'Score saved successfully' });
     },
     onError: (error: any) => {
-      toast({ title: 'Error', description: error.message?.includes('unique_student_subject_term_year') ? 'This subject has already been graded for this term' : 'Failed to save score', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to save score', variant: 'destructive' });
     }
   });
 
-  const filteredStudents = students.filter(student => {
-    const matchesSearch = student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || student.admission_number.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSearch;
-  });
+  // Class Leaderboard calculation
+  const classLeaderboard = useMemo(() => {
+    if (!selectedClass) return [];
+    const classReports = allReportCards.filter(r => (r.students as any)?.class_id === selectedClass);
+    const studentMap: Record<string, { student: any; totalScore: number; count: number }> = {};
+    classReports.forEach(r => {
+      const sid = r.student_id;
+      if (!studentMap[sid]) studentMap[sid] = { student: r.students, totalScore: 0, count: 0 };
+      studentMap[sid].totalScore += Number(r.score || 0);
+      studentMap[sid].count++;
+    });
+    return Object.values(studentMap)
+      .map(s => ({ ...s, average: s.count > 0 ? Math.round(s.totalScore / s.count) : 0 }))
+      .sort((a, b) => b.average - a.average)
+      .map((s, i, arr) => {
+        // Handle tied positions
+        let rank = i + 1;
+        if (i > 0 && arr[i].average === arr[i - 1].average) {
+          rank = (arr as any)[i - 1].rank;
+        }
+        (s as any).rank = rank;
+        return { ...s, rank };
+      });
+  }, [allReportCards, selectedClass]);
 
-  // Get subjects that haven't been graded yet
-  const ungradedSubjects = subjects.filter(sub => !reportCards.find(rc => rc.subject_id === sub.id));
+  // School Leaderboard (top 10)
+  const schoolLeaderboard = useMemo(() => {
+    const studentMap: Record<string, { student: any; totalScore: number; count: number }> = {};
+    allReportCards.forEach(r => {
+      const sid = r.student_id;
+      if (!studentMap[sid]) studentMap[sid] = { student: r.students, totalScore: 0, count: 0 };
+      studentMap[sid].totalScore += Number(r.score || 0);
+      studentMap[sid].count++;
+    });
+    return Object.values(studentMap)
+      .map(s => ({ ...s, average: s.count > 0 ? Math.round(s.totalScore / s.count) : 0 }))
+      .sort((a, b) => b.average - a.average)
+      .slice(0, 10)
+      .map((s, i, arr) => {
+        let rank = i + 1;
+        if (i > 0 && arr[i].average === arr[i - 1].average) rank = (arr as any)[i - 1].rank;
+        (s as any).rank = rank;
+        return { ...s, rank };
+      });
+  }, [allReportCards]);
 
-  // Student Report Card View
+  // Subject Performance Analytics
+  const subjectAnalytics = useMemo(() => {
+    if (!selectedClass) return [];
+    const classReports = allReportCards.filter(r => (r.students as any)?.class_id === selectedClass);
+    const subjectMap: Record<string, { name: string; scores: number[] }> = {};
+    classReports.forEach(r => {
+      const subName = (r.subjects as any)?.name;
+      if (!subName) return;
+      if (!subjectMap[r.subject_id]) subjectMap[r.subject_id] = { name: subName, scores: [] };
+      subjectMap[r.subject_id].scores.push(Number(r.score || 0));
+    });
+    return Object.values(subjectMap).map(s => ({
+      name: s.name,
+      average: Math.round(s.scores.reduce((a, b) => a + b, 0) / s.scores.length),
+      highest: Math.max(...s.scores),
+      lowest: Math.min(...s.scores),
+      count: s.scores.length
+    })).sort((a, b) => b.average - a.average);
+  }, [allReportCards, selectedClass]);
+
+  // Student detail view
   if (selectedStudent) {
-    const totalScore = reportCards.reduce((sum, r) => sum + r.score, 0);
-    const averageScore = reportCards.length > 0 ? Math.round(totalScore / reportCards.length) : 0;
+    const totalScore = studentReportCards.reduce((sum, r) => sum + Number(r.score || 0), 0);
+    const avgScore = studentReportCards.length > 0 ? Math.round(totalScore / studentReportCards.length) : 0;
+    const classPosition = classLeaderboard.findIndex(l => l.student?.id === selectedStudent.id);
+    const position = classPosition >= 0 ? classLeaderboard[classPosition].rank : '-';
 
     return (
       <div className="space-y-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
           <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={() => setSelectedStudent(null)} className="shrink-0">← Back</Button>
+            <Button variant="outline" onClick={() => setSelectedStudent(null)}><ArrowLeft className="w-4 h-4 mr-2" />Back</Button>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-foreground">{selectedStudent.full_name} - Results</h1>
+              <h1 className="text-2xl lg:text-3xl font-bold">{selectedStudent.full_name}</h1>
               <p className="text-muted-foreground">{selectedStudent.admission_number} • {selectedStudent.classes?.name} • {selectedTerm.charAt(0).toUpperCase() + selectedTerm.slice(1)} Term {selectedYearName}</p>
             </div>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Button variant="outline" className="w-full sm:w-auto"><Download className="w-4 h-4 mr-2" />Export PDF</Button>
-            <Button onClick={() => setShowGradeEntry(!showGradeEntry)} className="btn-gold w-full sm:w-auto">
+          <div className="flex gap-2">
+            <Button variant="outline"><Download className="w-4 h-4 mr-2" />Export PDF</Button>
+            <Button onClick={() => setShowGradeEntry(!showGradeEntry)} className="btn-gold">
               <Plus className="w-4 h-4 mr-2" />{showGradeEntry ? 'Hide' : 'Add'} Scores
             </Button>
           </div>
         </motion.div>
 
-        {/* Term Selector */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Term</label>
-            <Select value={selectedTerm} onValueChange={setSelectedTerm}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {terms.map((term) => (<SelectItem key={term} value={term}>{term.charAt(0).toUpperCase() + term.slice(1)} Term</SelectItem>))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Academic Year</label>
-            <Input value={selectedYearName} disabled className="bg-muted" />
-          </div>
-        </motion.div>
+        {/* Term selector */}
+        <div className="flex gap-4">
+          <Select value={selectedTerm} onValueChange={setSelectedTerm}>
+            <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+            <SelectContent>{terms.map(t => <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)} Term</SelectItem>)}</SelectContent>
+          </Select>
+          <Input value={selectedYearName} disabled className="w-48 bg-muted" />
+        </div>
 
-        {/* Score Entry Form */}
+        {/* Score Entry */}
         {showGradeEntry && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="card-premium">
               <CardHeader>
                 <CardTitle>Enter Scores</CardTitle>
-                <CardDescription>
-                  {ungradedSubjects.length > 0
-                    ? `${ungradedSubjects.length} subjects remaining to grade`
-                    : 'All subjects have been graded for this term'}
-                </CardDescription>
+                <CardDescription>{subjects.filter(s => !studentReportCards.find(r => r.subject_id === s.id)).length} subjects remaining</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-4">
-                  {subjects.map((subject) => {
-                    const existingGrade = reportCards.find(rc => rc.subject_id === subject.id);
+                <div className="grid gap-3">
+                  {subjects.map(subject => {
+                    const existing = studentReportCards.find(r => r.subject_id === subject.id);
                     return (
-                      <div key={subject.id} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end p-4 border rounded-lg">
-                        <div>
-                          <label className="text-sm font-medium">{subject.name}</label>
-                          <p className="text-xs text-muted-foreground">{subject.code}</p>
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium">Score (0-100)</label>
-                          <Input type="number" min="0" max="100" defaultValue={existingGrade?.score || ''} id={`score-${subject.id}`} placeholder="0-100" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium">Remarks</label>
-                          <Input defaultValue={existingGrade?.remarks || ''} id={`remarks-${subject.id}`} placeholder="Optional" />
-                        </div>
-                        <Button
-                          onClick={() => {
-                            const scoreInput = document.getElementById(`score-${subject.id}`) as HTMLInputElement;
-                            const remarksInput = document.getElementById(`remarks-${subject.id}`) as HTMLInputElement;
-                            const score = parseInt(scoreInput.value);
-                            if (score >= 0 && score <= 100) {
-                              gradeMutation.mutate({
-                                student_id: selectedStudent.id,
-                                subject_id: subject.id,
-                                term: selectedTerm,
-                                academic_year: selectedYearName,
-                                score,
-                                remarks: remarksInput.value || undefined,
-                                academic_year_id: selectedYearId || undefined,
-                              });
-                            } else {
-                              toast({ title: 'Invalid Score', description: 'Score must be between 0 and 100', variant: 'destructive' });
-                            }
-                          }}
-                          disabled={gradeMutation.isPending}
-                          className="btn-gold"
-                        >
-                          Save
-                        </Button>
+                      <div key={subject.id} className="grid grid-cols-1 lg:grid-cols-4 gap-3 items-end p-3 border rounded-lg">
+                        <div><p className="font-medium text-sm">{subject.name}</p><p className="text-xs text-muted-foreground">{subject.code}</p></div>
+                        <div><label className="text-xs text-muted-foreground">Score (0-100)</label><Input type="number" min="0" max="100" defaultValue={existing?.score || ''} id={`score-${subject.id}`} placeholder="0-100" /></div>
+                        <div><label className="text-xs text-muted-foreground">Remarks</label><Input defaultValue={existing?.remarks || ''} id={`remarks-${subject.id}`} placeholder="Optional" /></div>
+                        <Button size="sm" className="btn-gold" disabled={gradeMutation.isPending} onClick={() => {
+                          const score = parseInt((document.getElementById(`score-${subject.id}`) as HTMLInputElement).value);
+                          const remarks = (document.getElementById(`remarks-${subject.id}`) as HTMLInputElement).value;
+                          if (score >= 0 && score <= 100) {
+                            gradeMutation.mutate({ student_id: selectedStudent.id, subject_id: subject.id, term: selectedTerm, academic_year: selectedYearName, score, remarks: remarks || undefined, academic_year_id: selectedYearId || undefined });
+                          } else {
+                            toast({ title: 'Invalid', description: 'Score must be 0-100', variant: 'destructive' });
+                          }
+                        }}>Save</Button>
                       </div>
                     );
                   })}
-                  {subjects.length === 0 && (
-                    <p className="text-center text-muted-foreground py-4">No subjects found for this class. Add subjects in Settings first.</p>
-                  )}
+                  {subjects.length === 0 && <p className="text-center text-muted-foreground py-4">No subjects found. Add subjects in Settings.</p>}
                 </div>
               </CardContent>
             </Card>
@@ -272,129 +267,207 @@ export default function ReportCards() {
         )}
 
         {/* Results Table */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-          <Card className="card-premium">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Award className="w-5 h-5" />Academic Performance</CardTitle>
-              <CardDescription>Scores for {selectedTerm.charAt(0).toUpperCase() + selectedTerm.slice(1)} Term {selectedYearName}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {reportCardsLoading ? (
-                <div className="space-y-4">{[...Array(5)].map((_, i) => (<div key={i} className="flex justify-between items-center p-4"><Skeleton className="h-4 w-32" /><Skeleton className="h-6 w-12" /></div>))}</div>
-              ) : reportCards.length === 0 ? (
-                <div className="text-center py-8">
-                  <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">No scores recorded for this term</p>
-                  <Button onClick={() => setShowGradeEntry(true)} className="btn-gold mt-4">Add Scores</Button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Subject</TableHead>
-                          <TableHead>Code</TableHead>
-                          <TableHead>Score (%)</TableHead>
-                          <TableHead>Remarks</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {reportCards.map((report) => (
-                          <TableRow key={report.id}>
-                            <TableCell className="font-medium">{report.subjects?.name}</TableCell>
-                            <TableCell>{report.subjects?.code}</TableCell>
-                            <TableCell className="font-bold text-lg">{report.score}%</TableCell>
-                            <TableCell className="text-sm text-muted-foreground">{report.remarks || '-'}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-
-                  {/* Summary */}
-                  <div className="mt-6 p-4 bg-muted/30 rounded-lg">
-                    <h3 className="font-medium mb-2">Summary</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                      <div><p className="text-muted-foreground">Total Subjects</p><p className="font-bold text-lg">{reportCards.length}</p></div>
-                      <div><p className="text-muted-foreground">Total Score</p><p className="font-bold text-lg">{totalScore}</p></div>
-                      <div><p className="text-muted-foreground">Average Score</p><p className="font-bold text-lg">{averageScore}%</p></div>
-                      <div><p className="text-muted-foreground">Highest Score</p><p className="font-bold text-lg">{Math.max(...reportCards.map(r => r.score))}%</p></div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
-    );
-  }
-
-  // Student Selection View - Step 1: Select Class, Step 2: Select Student
-  return (
-    <div className="space-y-6">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Report Cards</h1>
-          <p className="text-muted-foreground">Select a class and student to view or manage scores</p>
-        </div>
-      </motion.div>
-
-      {/* Filters */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Step 1: Select Class</label>
-          <Select value={selectedClass} onValueChange={setSelectedClass}>
-            <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Classes</SelectItem>
-              {classes.map((cls) => (<SelectItem key={cls.id} value={cls.name}>{cls.name}</SelectItem>))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="relative space-y-2">
-          <label className="text-sm font-medium">Step 2: Search Student</label>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input placeholder="Search students..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Students Grid */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
         <Card className="card-premium">
-          <CardHeader>
-            <CardTitle>Select Student</CardTitle>
-            <CardDescription>{filteredStudents.length} students found</CardDescription>
-          </CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Award className="w-5 h-5" />Results</CardTitle></CardHeader>
           <CardContent>
-            {studentsLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[...Array(6)].map((_, i) => (<div key={i} className="p-4 border rounded-lg"><div className="flex items-center gap-3"><Skeleton className="h-10 w-10 rounded-full" /><div className="space-y-2"><Skeleton className="h-4 w-32" /><Skeleton className="h-3 w-24" /></div></div></div>))}
+            {studentReportCards.length === 0 ? (
+              <div className="text-center py-8">
+                <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No scores recorded</p>
+                <Button onClick={() => setShowGradeEntry(true)} className="btn-gold mt-4">Add Scores</Button>
               </div>
-            ) : filteredStudents.length === 0 ? (
-              <div className="text-center py-8"><User className="w-12 h-12 text-muted-foreground mx-auto mb-4" /><p className="text-muted-foreground">No students found</p></div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredStudents.map((student) => (
-                  <div key={student.id} className="p-4 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors" onClick={() => setSelectedStudent(student)}>
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center"><User className="w-5 h-5 text-primary" /></div>
-                      <div>
-                        <h3 className="font-medium">{student.full_name}</h3>
-                        <p className="text-sm text-muted-foreground">{student.admission_number}</p>
-                        <p className="text-xs text-muted-foreground">{student.classes?.name}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              <div className="space-y-4">
+                <Table>
+                  <TableHeader><TableRow><TableHead>Subject</TableHead><TableHead>Code</TableHead><TableHead>Score (%)</TableHead><TableHead>Remarks</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {studentReportCards.map(r => (
+                      <TableRow key={r.id}>
+                        <TableCell className="font-medium">{(r.subjects as any)?.name}</TableCell>
+                        <TableCell>{(r.subjects as any)?.code}</TableCell>
+                        <TableCell className="font-bold text-lg">{r.score}%</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{r.remarks || '-'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <div className="p-4 bg-muted/30 rounded-lg grid grid-cols-2 lg:grid-cols-4 gap-4 text-center">
+                  <div><p className="text-sm text-muted-foreground">Subjects</p><p className="text-xl font-bold">{studentReportCards.length}</p></div>
+                  <div><p className="text-sm text-muted-foreground">Total</p><p className="text-xl font-bold">{totalScore}</p></div>
+                  <div><p className="text-sm text-muted-foreground">Average</p><p className="text-xl font-bold">{avgScore}%</p></div>
+                  <div><p className="text-sm text-muted-foreground">Position</p><p className="text-xl font-bold">{position}</p></div>
+                </div>
               </div>
             )}
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  // Main Results Dashboard
+  return (
+    <div className="space-y-6">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        <h1 className="text-2xl lg:text-3xl font-bold">Results & Leaderboards</h1>
+        <p className="text-muted-foreground">View rankings, performance analytics, and manage student results</p>
       </motion.div>
+
+      {/* Filters */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Select value={selectedTerm} onValueChange={setSelectedTerm}>
+          <SelectTrigger><SelectValue placeholder="Select term" /></SelectTrigger>
+          <SelectContent>{terms.map(t => <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)} Term</SelectItem>)}</SelectContent>
+        </Select>
+        <Select value={selectedClass} onValueChange={setSelectedClass}>
+          <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
+          <SelectContent>{classes.map(cls => <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>)}</SelectContent>
+        </Select>
+        <Input value={selectedYearName} disabled className="bg-muted" />
+      </motion.div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="class-leaderboard"><Trophy className="w-4 h-4 mr-2" />Class Ranking</TabsTrigger>
+          <TabsTrigger value="school-leaderboard"><Award className="w-4 h-4 mr-2" />School Top 10</TabsTrigger>
+          <TabsTrigger value="subject-analytics"><BarChart3 className="w-4 h-4 mr-2" />Subject Analytics</TabsTrigger>
+        </TabsList>
+
+        {/* Class Leaderboard */}
+        <TabsContent value="class-leaderboard">
+          <Card className="card-premium">
+            <CardHeader>
+              <CardTitle>Class Leaderboard</CardTitle>
+              <CardDescription>{selectedClass ? `${classes.find(c => c.id === selectedClass)?.name} - ${selectedTerm.charAt(0).toUpperCase() + selectedTerm.slice(1)} Term ${selectedYearName}` : 'Select a class to view rankings'}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {!selectedClass ? (
+                <div className="text-center py-8"><Trophy className="w-12 h-12 text-muted-foreground mx-auto mb-4" /><p className="text-muted-foreground">Select a class above to view the leaderboard</p></div>
+              ) : reportCardsLoading ? (
+                <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+              ) : classLeaderboard.length === 0 ? (
+                <div className="text-center py-8"><p className="text-muted-foreground">No results found for this class and term</p></div>
+              ) : (
+                <Table>
+                  <TableHeader><TableRow><TableHead className="w-16">Rank</TableHead><TableHead>Student</TableHead><TableHead>Total</TableHead><TableHead>Average</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {classLeaderboard.map((entry, i) => (
+                      <TableRow key={entry.student?.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => setSelectedStudent(entry.student)}>
+                        <TableCell>
+                          {entry.rank <= 3 ? (
+                            <Badge className={entry.rank === 1 ? 'bg-yellow-400 text-yellow-900' : entry.rank === 2 ? 'bg-gray-300 text-gray-800' : 'bg-orange-300 text-orange-900'}>{entry.rank}</Badge>
+                          ) : <span className="font-medium">{entry.rank}</span>}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{entry.student?.full_name}</p>
+                            <p className="text-sm text-muted-foreground">{entry.student?.admission_number}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-medium">{entry.totalScore}</TableCell>
+                        <TableCell className="font-bold text-lg">{entry.average}%</TableCell>
+                        <TableCell><Button variant="ghost" size="sm">View</Button></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Student cards for entering results */}
+          {selectedClass && (
+            <Card className="card-premium mt-4">
+              <CardHeader>
+                <CardTitle>Enter Results</CardTitle>
+                <CardDescription>Click a student to enter or view their scores</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {classStudents.map(student => (
+                    <div key={student.id} className="p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors" onClick={() => setSelectedStudent(student)}>
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center"><User className="w-5 h-5 text-primary" /></div>
+                        <div>
+                          <p className="font-medium text-sm">{student.full_name}</p>
+                          <p className="text-xs text-muted-foreground">{student.admission_number}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* School Leaderboard */}
+        <TabsContent value="school-leaderboard">
+          <Card className="card-premium">
+            <CardHeader>
+              <CardTitle>School Top 10</CardTitle>
+              <CardDescription>Best performing students across all classes - {selectedTerm.charAt(0).toUpperCase() + selectedTerm.slice(1)} Term {selectedYearName}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {reportCardsLoading ? (
+                <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+              ) : schoolLeaderboard.length === 0 ? (
+                <div className="text-center py-8"><p className="text-muted-foreground">No results found</p></div>
+              ) : (
+                <Table>
+                  <TableHeader><TableRow><TableHead className="w-16">Rank</TableHead><TableHead>Student</TableHead><TableHead>Class</TableHead><TableHead>Average</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {schoolLeaderboard.map(entry => (
+                      <TableRow key={entry.student?.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => setSelectedStudent(entry.student)}>
+                        <TableCell>
+                          {entry.rank <= 3 ? (
+                            <Badge className={entry.rank === 1 ? 'bg-yellow-400 text-yellow-900' : entry.rank === 2 ? 'bg-gray-300 text-gray-800' : 'bg-orange-300 text-orange-900'}>{entry.rank}</Badge>
+                          ) : <span className="font-medium">{entry.rank}</span>}
+                        </TableCell>
+                        <TableCell><p className="font-medium">{entry.student?.full_name}</p></TableCell>
+                        <TableCell><span className="px-2 py-1 bg-primary/10 text-primary rounded-md text-sm">{entry.student?.classes?.name}</span></TableCell>
+                        <TableCell className="font-bold text-lg">{entry.average}%</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Subject Analytics */}
+        <TabsContent value="subject-analytics">
+          <Card className="card-premium">
+            <CardHeader>
+              <CardTitle>Subject Performance</CardTitle>
+              <CardDescription>{selectedClass ? `${classes.find(c => c.id === selectedClass)?.name} - Performance by subject` : 'Select a class to view analytics'}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {!selectedClass ? (
+                <div className="text-center py-8"><BarChart3 className="w-12 h-12 text-muted-foreground mx-auto mb-4" /><p className="text-muted-foreground">Select a class to view subject analytics</p></div>
+              ) : subjectAnalytics.length === 0 ? (
+                <div className="text-center py-8"><p className="text-muted-foreground">No subject data available</p></div>
+              ) : (
+                <Table>
+                  <TableHeader><TableRow><TableHead>Subject</TableHead><TableHead>Class Average</TableHead><TableHead>Highest</TableHead><TableHead>Lowest</TableHead><TableHead>Students</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {subjectAnalytics.map(sa => (
+                      <TableRow key={sa.name}>
+                        <TableCell className="font-medium">{sa.name}</TableCell>
+                        <TableCell className="font-bold">{sa.average}%</TableCell>
+                        <TableCell className="text-green-600 font-medium">{sa.highest}%</TableCell>
+                        <TableCell className="text-red-600 font-medium">{sa.lowest}%</TableCell>
+                        <TableCell>{sa.count}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
